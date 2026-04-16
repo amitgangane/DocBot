@@ -4,3 +4,4 @@ __pycache__/
 .env
 model.ipynb
 documents/
+.DS_Store
