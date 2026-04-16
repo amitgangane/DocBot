@@ -1,0 +1,9 @@
+langchain
+langchain-openai
+ragas
+pytest
+requests
+dotenv
+langchain-community
+langchain_pymupdf4llm
+ipykernel
