@@ -1,11 +1,12 @@
-from pdf_ingestion.docloader import load_pdf
+try:
+    from pdf_ingestion.docloader import load_pdf
+except ModuleNotFoundError:
+    from docloader import load_pdf
 from langchain_text_splitters.character import RecursiveCharacterTextSplitter
 
 
-def chunk_documents() -> list:
+def chunk_documents(docs:list) -> list:
     """Automatically loads PDF and returns chunks."""
-
-    docs = load_pdf()
 
     char_splitter = RecursiveCharacterTextSplitter(
         chunk_size    = 500,

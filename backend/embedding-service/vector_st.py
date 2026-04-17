@@ -3,8 +3,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from langchain_chroma import Chroma
-from embeddings.embeddings import embedding_model
 from pdf_ingestion.chunking import chunk_documents
+import os
+from langchain_openai import OpenAIEmbeddings
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+embedding_model = OpenAIEmbeddings(
+    model="text-embedding-3-large",
+    dimensions=1024
+)
 
 
 def get_retriever():
