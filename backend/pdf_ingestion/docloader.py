@@ -21,7 +21,7 @@ FILE_PATH = "/Users/amit/Desktop/DocBot/backend/pdf_ingestion/documents/attentio
 
 # INIT LLM (once, reused)
 def get_image_parser() -> LLMImageBlobParser:
-    llm = ChatOpenAI(model="gpt-4.1-mini", max_tokens=1024)
+    llm = ChatOpenAI(model="gpt-4o-mini", max_tokens=1024)
     return LLMImageBlobParser(model=llm)
 
 

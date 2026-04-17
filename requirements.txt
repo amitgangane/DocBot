@@ -3,7 +3,10 @@ langchain-openai
 ragas
 pytest
 requests
-dotenv
+python-dotenv
 langchain-community
 langchain_pymupdf4llm
 ipykernel
+camelot-py
+langchain-chroma
+langchain-core
