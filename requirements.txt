@@ -1,12 +1,25 @@
+# Core
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+httpx
+
+# LangChain
 langchain
 langchain-openai
-ragas
-pytest
-requests
-python-dotenv
 langchain-community
-langchain_pymupdf4llm
-ipykernel
-camelot-py
-langchain-chroma
 langchain-core
+langchain-chroma
+langchain-text-splitters
+langchain_pymupdf4llm
+
+# Vector Store
+chromadb
+
+# Testing
+pytest
+ragas
+
+# Development
+ipykernel

@@ -1,0 +1,115 @@
+import os
+import shutil
+
+from fastapi import APIRouter, UploadFile, File, HTTPException
+
+from app.core.config import settings
+from app.models import (
+    HealthResponse,
+    IngestResponse,
+    EmbedRequest,
+    EmbedResponse,
+    CountResponse,
+    QueryRequest,
+    QueryResponse,
+)
+from app.db.vector_db import get_vectorstore, get_chunk_count
+from app.services.rag_service import query as rag_query
+from ingestion.loader import load_pdf
+from ingestion.chunking import chunk_documents
+
+router = APIRouter()
+
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+
+@router.get("/health", response_model=HealthResponse)
+async def health_check():
+    """Health check endpoint."""
+    return HealthResponse(status="ok", service="rag-app")
+
+
+@router.post("/ingest/upload", response_model=IngestResponse)
+async def ingest_pdf(file: UploadFile = File(...)):
+    """
+    Upload a PDF file, parse it, chunk it, and store embeddings.
+    """
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    file_path = os.path.join(settings.UPLOAD_DIR, file.filename)
+
+    # Save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Parse PDF
+    try:
+        docs = load_pdf(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)}")
+
+    # Chunk documents
+    try:
+        chunks = chunk_documents(docs)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to chunk document: {str(e)}")
+
+    # Add to vector store
+    try:
+        vectorstore = get_vectorstore()
+        vectorstore.add_documents(chunks)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to embed chunks: {str(e)}")
+
+    return IngestResponse(
+        filename=file.filename,
+        status="success",
+        pages_parsed=len(docs),
+        chunk_count=len(chunks),
+        message=f"Successfully ingested {file.filename}",
+    )
+
+
+@router.post("/embed", response_model=EmbedResponse)
+async def embed_chunks(request: EmbedRequest):
+    """
+    Receive chunks and store them in the vector store.
+    """
+    try:
+        vectorstore = get_vectorstore()
+        texts = [chunk.page_content for chunk in request.chunks]
+        metadatas = [chunk.metadata for chunk in request.chunks]
+        vectorstore.add_texts(texts=texts, metadatas=metadatas)
+
+        total = get_chunk_count()
+        return EmbedResponse(
+            status="success",
+            chunks_added=len(request.chunks),
+            total_chunks=total,
+            message=f"Added {len(request.chunks)} chunks",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to embed: {str(e)}")
+
+
+@router.get("/embed/count", response_model=CountResponse)
+async def get_count():
+    """Get total chunk count in vector store."""
+    try:
+        count = get_chunk_count()
+        return CountResponse(total_chunks=count, status="ok")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get count: {str(e)}")
+
+
+@router.post("/query", response_model=QueryResponse)
+async def query_documents(request: QueryRequest):
+    """
+    Query the RAG system with a question.
+    """
+    try:
+        result = rag_query(request.question)
+        return QueryResponse(answer=result["answer"], sources=result["sources"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
