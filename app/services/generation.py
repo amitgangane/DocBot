@@ -15,16 +15,17 @@ def get_llm() -> ChatOpenAI:
 
 
 RAG_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are a helpful assistant that answers
-     questions about research papers. Answer using only
-     the context provided. If the answer is not in the
-     context, say 'I don't know'."""),
-    ("human", """
-     Context:
-     {context}
+    ("system", """You are a helpful assistant that answers questions about research papers.
+Use the context provided to answer the question. Synthesize information from the context
+to give a comprehensive answer. If the context contains partial information, use it to
+provide the best possible answer. Only say 'I don't know' if the context is completely
+unrelated to the question."""),
+    ("human", """Context:
+{context}
 
-     Question: {question}
-     """)
+Question: {question}
+
+Answer:""")
 ])
 
 

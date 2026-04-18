@@ -23,3 +23,5 @@ ragas
 
 # Development
 ipykernel
+huggingface_hub
+sentence_transformers

@@ -19,7 +19,10 @@ class Settings:
 
     # Vector Store
     CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_DIR", "./chroma_db")
-    RETRIEVER_K: int = int(os.getenv("RETRIEVER_K", "8"))
+    RETRIEVER_K: int = int(os.getenv("RETRIEVER_K", "5"))
+
+    # Reranker
+    RERANKER_INITIAL_K: int = int(os.getenv("RERANKER_INITIAL_K", "10"))
 
     # Ingestion
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./documents")

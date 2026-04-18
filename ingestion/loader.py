@@ -38,6 +38,3 @@ def load_pdf(file_path: str) -> list:
     print(f"Loaded {len(docs)} pages from {os.path.basename(file_path)}")
     return docs
 
-
-docs = load_pdf(file_path="/Users/amit/Desktop/DocBot/documents/attention.pdf")
-print(docs[0].page_content)
