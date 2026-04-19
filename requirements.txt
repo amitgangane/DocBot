@@ -20,11 +20,16 @@ langgraph-checkpoint-sqlite
 # Vector Store
 chromadb
 
-# Testing
+# Testing & Evaluation
 pytest
 ragas
+datasets
 
 # Development
 ipykernel
 huggingface_hub
 sentence_transformers
+
+# LangSmith
+langsmith
+langgraph-cli[inmem]

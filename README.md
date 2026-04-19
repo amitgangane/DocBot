@@ -191,6 +191,33 @@ DocBot uses LangGraph with SQLite checkpointing for conversation memory:
 | `user-123` | "How does it work?" | Uses previous context, rewrites query |
 | `user-456` | "What is attention?" | Separate conversation |
 
+## Observability (LangSmith)
+
+DocBot integrates with LangSmith for full pipeline tracing.
+
+### Setup
+
+Add to your `.env`:
+
+```env
+LANGCHAIN_API_KEY=your_langsmith_api_key
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_PROJECT=doc-bot-project
+```
+
+### What Gets Traced
+
+| Component | Traced Data |
+|-----------|-------------|
+| Graph Execution | Full LangGraph run with all nodes |
+| Query Rewrite | Input/output of rewrite node |
+| Retrieval | ChromaDB similarity search |
+| Reranker | Cross-encoder scoring |
+| Generation | LLM prompts, responses, tokens, latency |
+| Memory | Chat history updates |
+
+View traces at: [smith.langchain.com](https://smith.langchain.com)
+
 ## TODO / Roadmap
 
 - [ ] **Duplicate detection**: Add content-based hashing to prevent duplicate chunks
@@ -214,3 +241,4 @@ DocBot uses LangGraph with SQLite checkpointing for conversation memory:
 - **Vector Store**: ChromaDB
 - **Memory**: SQLite (via LangGraph checkpointer)
 - **PDF Parsing**: PyMuPDF4LLM
+- **Observability**: LangSmith
