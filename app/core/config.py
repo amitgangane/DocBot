@@ -10,7 +10,7 @@ class Settings:
 
     # Embedding model
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-    EMBEDDING_DIMENSIONS: int = int(os.getenv("EMBEDDING_DIMENSIONS", "1024"))
+    EMBEDDING_DIMENSIONS: int = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
 
     # LLM
     LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
@@ -18,7 +18,9 @@ class Settings:
     LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "500"))
 
     # Vector Store
-    CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_DIR", "./chroma_db")
+    QDRANT_URL: str = os.getenv("QDRANT_URL", "")
+    QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY", "")
+    QDRANT_COLLECTION_NAME: str = os.getenv("QDRANT_COLLECTION_NAME", "RAG-app")
     RETRIEVER_K: int = int(os.getenv("RETRIEVER_K", "5"))
 
     # Reranker

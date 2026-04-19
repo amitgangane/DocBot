@@ -17,8 +17,10 @@ langchain_pymupdf4llm
 # LangGraph
 langgraph
 langgraph-checkpoint-sqlite
+
 # Vector Store
-chromadb
+langchain-qdrant
+qdrant-client
 
 # Testing & Evaluation
 pytest
