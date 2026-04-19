@@ -14,6 +14,9 @@ langchain-chroma
 langchain-text-splitters
 langchain_pymupdf4llm
 
+# LangGraph
+langgraph
+langgraph-checkpoint-sqlite
 # Vector Store
 chromadb
 

@@ -1,35 +1,52 @@
-from app.services.retrieval import search_similar
-from app.services.reranker import rerank_documents
-from app.services.generation import generate_answer
-from app.core.config import settings
+"""RAG service using LangGraph pipeline."""
+
+from typing import Optional
+from app.services.graph import get_rag_graph
 
 
-def query(question: str, use_reranker: bool = True) -> dict:
+def query(
+    question: str,
+    thread_id: str = "default",
+    chat_history: Optional[list] = None
+) -> dict:
     """
-    Main RAG pipeline: retrieve, rerank, and generate answer.
+    Query the RAG system using LangGraph pipeline.
 
     Args:
         question: User's question
-        use_reranker: Whether to use cross-encoder reranking (default: True)
+        thread_id: Session ID for maintaining conversation context
+        chat_history: Optional existing chat history
 
     Returns:
-        dict with answer and number of sources used
+        dict with answer, sources count, and updated chat history
     """
-    # Step 1: Retrieve more documents than needed (for reranking)
-    initial_k = settings.RERANKER_INITIAL_K if use_reranker else settings.RETRIEVER_K
-    docs = search_similar(question, k=initial_k)
+    graph = get_rag_graph()
 
-    # Step 2: Rerank to get most relevant documents
-    if use_reranker and docs:
-        docs = rerank_documents(question, docs, top_k=settings.RETRIEVER_K)
+    # Build config with thread_id for memory persistence
+    config = {"configurable": {"thread_id": thread_id}}
 
-    # Step 3: Build context from top documents
-    context = "\n\n".join([doc.page_content for doc in docs])
+    # Build initial state
+    initial_state = {"query": question}
+    if chat_history:
+        initial_state["chat_history"] = chat_history
 
-    # Step 4: Generate answer
-    answer = generate_answer(context, question)
+    # Run the graph
+    result = graph.invoke(initial_state, config=config)
 
     return {
-        "answer": answer,
-        "sources": len(docs),
+        "answer": result["answer"],
+        "sources": len(result.get("reranked_docs", [])),
+        "chat_history": result.get("chat_history", []),
+    }
+
+
+def query_simple(question: str) -> dict:
+    """
+    Simple query without conversation memory.
+    For backwards compatibility with existing API.
+    """
+    result = query(question, thread_id="simple-query")
+    return {
+        "answer": result["answer"],
+        "sources": result["sources"],
     }

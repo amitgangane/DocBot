@@ -12,3 +12,4 @@ class EmbedRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     question: str
+    thread_id: str = "default"  # Session ID for conversation memory

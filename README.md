@@ -1,6 +1,6 @@
 # DocBot - RAG Application
 
-A Retrieval-Augmented Generation (RAG) application for querying PDF documents using OpenAI and ChromaDB.
+A Retrieval-Augmented Generation (RAG) application for querying PDF documents using OpenAI, ChromaDB, and LangGraph.
 
 ## Features
 
@@ -8,34 +8,48 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 - Document chunking with configurable size/overlap
 - Vector embeddings using OpenAI `text-embedding-3-small`
 - Cross-encoder reranking for improved retrieval accuracy
+- Conversation memory with persistent chat history
+- Query rewriting for natural follow-up questions
 - Persistent storage with ChromaDB
 - RAG-based Q&A using GPT-4o-mini
 - FastAPI REST API
 
-## RAG Pipeline
+## LangGraph RAG Pipeline
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         QUERY FLOW                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   User Question                                                 │
-│        ↓                                                        │
-│   ┌─────────────────┐                                           │
-│   │   Retrieval     │  → Fetch top 10 docs (embedding search)   │
-│   └────────┬────────┘                                           │
-│            ↓                                                    │
-│   ┌─────────────────┐                                           │
-│   │   Reranker      │  → Cross-encoder scores → keep top 5      │
-│   └────────┬────────┘                                           │
-│            ↓                                                    │
-│   ┌─────────────────┐                                           │
-│   │   Generation    │  → LLM generates answer from context      │
-│   └────────┬────────┘                                           │
-│            ↓                                                    │
-│       Response                                                  │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                      LANGGRAPH QUERY FLOW                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   User Question + thread_id                                         │
+│        ↓                                                            │
+│   ┌─────────────────┐                                               │
+│   │  Query Rewrite  │  → Resolves pronouns using chat history       │
+│   └────────┬────────┘    "How does it work?" → "How does the        │
+│            ↓              Transformer work?"                        │
+│   ┌─────────────────┐                                               │
+│   │   Retrieval     │  → Fetch top 10 docs (embedding search)       │
+│   └────────┬────────┘                                               │
+│            ↓                                                        │
+│   ┌─────────────────┐                                               │
+│   │   Reranker      │  → Cross-encoder scores → keep top 5          │
+│   └────────┬────────┘                                               │
+│            ↓                                                        │
+│   ┌─────────────────┐                                               │
+│   │ Build Context   │  → Combine reranked docs into context         │
+│   └────────┬────────┘                                               │
+│            ↓                                                        │
+│   ┌─────────────────┐                                               │
+│   │   Generation    │  → LLM generates answer from context          │
+│   └────────┬────────┘                                               │
+│            ↓                                                        │
+│   ┌─────────────────┐                                               │
+│   │ Update Memory   │  → Save Q&A to chat history (SQLite)          │
+│   └────────┬────────┘                                               │
+│            ↓                                                        │
+│       Response                                                      │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Project Structure
@@ -53,9 +67,12 @@ DocBot/
 │   │   ├── request.py          # Pydantic request models
 │   │   └── response.py         # Pydantic response models
 │   ├── services/
+│   │   ├── state.py            # LangGraph AgentState
+│   │   ├── nodes.py            # LangGraph node functions
+│   │   ├── graph.py            # LangGraph builder
+│   │   ├── rag_service.py      # Main RAG entry point
 │   │   ├── embedding.py        # Embedding logic
 │   │   ├── generation.py       # LLM calls
-│   │   ├── rag_service.py      # Main RAG pipeline
 │   │   ├── reranker.py         # Cross-encoder reranking
 │   │   └── retrieval.py        # Vector search
 │   └── main.py                 # FastAPI entrypoint
@@ -68,6 +85,7 @@ DocBot/
 │
 ├── tests/                      # Unit tests
 ├── workers/                    # Background jobs (future)
+├── checkpoints.db              # SQLite conversation memory
 ├── requirements.txt
 ├── .env
 └── README.md
@@ -115,6 +133,7 @@ uvicorn app.main:app --reload
 ```
 
 API available at: `http://localhost:8000`
+Swagger docs at: `http://localhost:8000/docs`
 
 ## API Endpoints
 
@@ -124,7 +143,7 @@ API available at: `http://localhost:8000`
 | POST | `/ingest/upload` | Upload and index a PDF |
 | POST | `/embed` | Embed raw chunks |
 | GET | `/embed/count` | Get total chunk count |
-| POST | `/query` | Query documents with a question |
+| POST | `/query` | Query documents with conversation memory |
 
 ### Example: Upload PDF
 
@@ -133,13 +152,21 @@ curl -X POST "http://localhost:8000/ingest/upload" \
   -F "file=@document.pdf"
 ```
 
-### Example: Query
+### Example: Query with Conversation Memory
 
 ```bash
+# First question
 curl -X POST "http://localhost:8000/query" \
   -H "Content-Type: application/json" \
-  -d '{"question": "What is the transformer architecture?"}'
+  -d '{"question": "What is the transformer architecture?", "thread_id": "user-123"}'
+
+# Follow-up question (same thread_id)
+curl -X POST "http://localhost:8000/query" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "How does it use attention?", "thread_id": "user-123"}'
 ```
+
+The follow-up query automatically rewrites "it" to "the Transformer" using conversation history.
 
 ### Example Response
 
@@ -150,9 +177,23 @@ curl -X POST "http://localhost:8000/query" \
 }
 ```
 
+## Conversation Memory
+
+DocBot uses LangGraph with SQLite checkpointing for conversation memory:
+
+- **Same `thread_id`** = Same conversation (history shared)
+- **Different `thread_id`** = New conversation (fresh start)
+- **Persistence** = Conversations survive server restarts
+
+| thread_id | Query | Behavior |
+|-----------|-------|----------|
+| `user-123` | "What is attention?" | New conversation |
+| `user-123` | "How does it work?" | Uses previous context, rewrites query |
+| `user-456` | "What is attention?" | Separate conversation |
+
 ## TODO / Roadmap
 
-- [ ] **Duplicate detection**: Add content-based hashing to prevent duplicate chunks when re-uploading same PDF (even with different filename)
+- [ ] **Duplicate detection**: Add content-based hashing to prevent duplicate chunks
 - [ ] Add Redis caching for frequent queries
 - [ ] Add S3/blob storage for PDFs
 - [ ] Background workers for async ingestion
@@ -161,13 +202,15 @@ curl -X POST "http://localhost:8000/query" \
 - [ ] Add more comprehensive tests
 - [ ] Support for other document types (DOCX, TXT)
 - [ ] Add evaluation metrics (RAGAS)
+- [ ] Conditional routing in LangGraph (e.g., skip rerank for simple queries)
 
 ## Tech Stack
 
 - **Framework**: FastAPI
+- **Orchestration**: LangGraph (stateful workflows)
 - **LLM**: OpenAI GPT-4o-mini
 - **Embeddings**: OpenAI text-embedding-3-small
 - **Reranker**: Cross-encoder (ms-marco-MiniLM-L6-v2)
 - **Vector Store**: ChromaDB
+- **Memory**: SQLite (via LangGraph checkpointer)
 - **PDF Parsing**: PyMuPDF4LLM
-- **Orchestration**: LangChain

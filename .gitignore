@@ -5,3 +5,7 @@ __pycache__/
 model.ipynb
 documents/
 .DS_Store
+chroma_db/
+checkpoints.db
+checkpoints.db-shm
+checkpoints.db-wal

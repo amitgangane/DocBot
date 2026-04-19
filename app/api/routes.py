@@ -107,9 +107,10 @@ async def get_count():
 async def query_documents(request: QueryRequest):
     """
     Query the RAG system with a question.
+    Uses LangGraph pipeline with conversation memory.
     """
     try:
-        result = rag_query(request.question)
+        result = rag_query(request.question, thread_id=request.thread_id)
         return QueryResponse(answer=result["answer"], sources=result["sources"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
