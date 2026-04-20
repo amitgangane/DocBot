@@ -1,6 +1,6 @@
 """LangGraph nodes for the RAG pipeline."""
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, trim_messages
 from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
@@ -20,21 +20,30 @@ def get_rewrite_llm() -> ChatOpenAI:
         _rewrite_llm = ChatOpenAI(model=settings.LLM_MODEL, temperature=0)
     return _rewrite_llm
 
-
 def rewrite_query_node(state: AgentState) -> dict:
-    """
-    Rewrite query considering chat history.
-    If no history, pass through the original query.
-    """
+    """Rewrite query using a token-aware trimmer."""
     history = state.get("chat_history", [])
 
     if not history:
         return {"rewritten_query": state["query"]}
 
-    # Condense history + query into standalone question
-    llm = get_rewrite_llm()
-    history_text = "\n".join([f"{m.type}: {m.content}" for m in history[-4:]])
+    # 1. Define the trimmer (can be moved outside the function for performance)
+    trimmer = trim_messages(
+        max_tokens=settings.REWRITE_MAX_TOKENS,
+        strategy="last",           # Keep the most recent messages
+        token_counter=get_rewrite_llm(), # Use the LLM to count tokens accurately
+        start_on="human",          # Ensure the snippet doesn't start with a random AI response
+        include_system=True,       # Keep your instructions if they are in history
+    )
 
+    # 2. Apply the trimmer to your chat history
+    trimmed_history = trimmer.invoke(history)
+
+    # 3. Format the trimmed messages for your prompt
+    # Now you are certain history_text won't blow up your context window
+    history_text = "\n".join([f"{m.type}: {m.content}" for m in trimmed_history])
+
+    llm = get_rewrite_llm()
     prompt = f"""Given the chat history and a follow-up question, rewrite the question to be standalone.
 
 Chat History:
@@ -46,7 +55,6 @@ Standalone Question:"""
 
     response = llm.invoke(prompt)
     return {"rewritten_query": response.content}
-
 
 def retrieve_node(state: AgentState) -> dict:
     """Retrieve documents using embedding similarity search."""

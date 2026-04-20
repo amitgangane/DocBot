@@ -26,6 +26,9 @@ class Settings:
     # Reranker
     RERANKER_INITIAL_K: int = int(os.getenv("RERANKER_INITIAL_K", "10"))
 
+    # Query Rewriting
+    REWRITE_MAX_TOKENS: int = int(os.getenv("REWRITE_MAX_TOKENS", "1000"))
+
     # Ingestion
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./documents")
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
