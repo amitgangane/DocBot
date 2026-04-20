@@ -5,7 +5,10 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from app.core.config import settings
+from app.core.logger import setup_logger
 from app.services.state import AgentState
+
+logger = setup_logger("graph")
 from app.services.nodes import (
     rewrite_query_node,
     retrieve_node,
@@ -40,12 +43,12 @@ def get_checkpointer():
             )
             _checkpointer = PostgresSaver(conn)
             _checkpointer.setup()  # Create tables if they don't exist
-            print("Using Supabase PostgreSQL for chat history")
+            logger.info("Using Supabase PostgreSQL for chat history")
         else:
             # Fallback to SQLite for local development
             conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
             _checkpointer = SqliteSaver(conn)
-            print("Using SQLite for chat history (set SUPABASE_DB_URL for PostgreSQL)")
+            logger.info("Using SQLite for chat history (set SUPABASE_DB_URL for PostgreSQL)")
     return _checkpointer
 
 
@@ -77,7 +80,9 @@ def get_rag_graph():
     """Get compiled RAG graph (singleton)."""
     global _graph
     if _graph is None:
+        logger.info("Building RAG graph...")
         graph = build_rag_graph()
         checkpointer = get_checkpointer()
         _graph = graph.compile(checkpointer=checkpointer)
+        logger.info("RAG graph compiled successfully")
     return _graph

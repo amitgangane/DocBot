@@ -4,10 +4,13 @@ from langchain_core.messages import HumanMessage, AIMessage, trim_messages
 from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
+from app.core.logger import setup_logger
 from app.services.state import AgentState
 from app.services.retrieval import search_similar
 from app.services.reranker import rerank_documents
 from app.services.generation import generate_answer
+
+logger = setup_logger("nodes")
 
 # LLM for query rewriting
 _rewrite_llm = None
@@ -25,7 +28,10 @@ def rewrite_query_node(state: AgentState) -> dict:
     history = state.get("chat_history", [])
 
     if not history:
+        logger.debug(f"No history, using original query")
         return {"rewritten_query": state["query"]}
+
+    logger.debug(f"Rewriting query with {len(history)} history messages")
 
     # 1. Define the trimmer (can be moved outside the function for performance)
     trimmer = trim_messages(
@@ -54,12 +60,15 @@ Follow-up Question: {state["query"]}
 Standalone Question:"""
 
     response = llm.invoke(prompt)
+    logger.info(f"Query rewritten: \"{response.content[:50]}...\"")
     return {"rewritten_query": response.content}
+
 
 def retrieve_node(state: AgentState) -> dict:
     """Retrieve documents using embedding similarity search."""
     query = state.get("rewritten_query") or state["query"]
     docs = search_similar(query, k=settings.RERANKER_INITIAL_K)
+    logger.info(f"Retrieved {len(docs)} documents")
     return {"retrieved_docs": docs}
 
 
@@ -71,12 +80,14 @@ def rerank_node(state: AgentState) -> dict:
         state["retrieved_docs"],
         top_k=settings.RETRIEVER_K
     )
+    logger.info(f"Reranked to top {len(docs)} documents")
     return {"reranked_docs": docs}
 
 
 def build_context_node(state: AgentState) -> dict:
     """Build context string from reranked documents."""
     context = "\n\n".join([doc.page_content for doc in state["reranked_docs"]])
+    logger.debug(f"Built context: {len(context)} chars")
     return {"context": context}
 
 
@@ -84,6 +95,7 @@ def generate_node(state: AgentState) -> dict:
     """Generate answer using LLM."""
     query = state.get("rewritten_query") or state["query"]
     answer = generate_answer(state["context"], query)
+    logger.info(f"Generated answer: {len(answer)} chars")
     return {"answer": answer}
 
 
@@ -92,4 +104,5 @@ def update_memory_node(state: AgentState) -> dict:
     history = list(state.get("chat_history", []))
     history.append(HumanMessage(content=state["query"]))
     history.append(AIMessage(content=state["answer"]))
+    logger.debug(f"Updated chat history: {len(history)} messages")
     return {"chat_history": history}

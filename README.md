@@ -108,6 +108,9 @@ Create a `.env` file:
 ```env
 OPENAI_API_KEY=your_openai_api_key
 
+# Logging
+LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
+
 # LLM Settings
 LLM_MODEL=gpt-4o-mini
 LLM_TEMPERATURE=0.6
@@ -227,6 +230,41 @@ LANGCHAIN_PROJECT=doc-bot-project
 
 View traces at: [smith.langchain.com](https://smith.langchain.com)
 
+## Logging
+
+DocBot includes a centralized logging module for debugging and monitoring.
+
+### Configuration
+
+Set the log level in `.env`:
+
+```env
+LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
+```
+
+### Log Output
+
+```
+2024-01-15 10:23:45 | INFO  | routes       | Query received: "What is attention?" thread_id=user-123
+2024-01-15 10:23:45 | DEBUG | nodes        | Rewriting query with 4 history messages
+2024-01-15 10:23:46 | INFO  | retrieval    | Similarity search: 10 docs in 234ms
+2024-01-15 10:23:46 | INFO  | reranker     | Reranked 10 -> 5 docs in 89ms
+2024-01-15 10:23:48 | INFO  | generation   | LLM response: 156 chars in 1.8s
+2024-01-15 10:23:48 | INFO  | routes       | Query complete: 5 sources in 2.3s
+```
+
+### Logged Components
+
+| Module | What's Logged |
+|--------|---------------|
+| `routes` | Request/response, timing |
+| `nodes` | Pipeline stage execution |
+| `retrieval` | Document search timing |
+| `reranker` | Reranking scores and timing |
+| `generation` | LLM response timing |
+| `graph` | Checkpointer initialization |
+| `vector_db` | Qdrant connection status |
+
 ## TODO / Roadmap
 
 - [ ] **Duplicate detection**: Add content-based hashing to prevent duplicate chunks
@@ -234,7 +272,7 @@ View traces at: [smith.langchain.com](https://smith.langchain.com)
 - [ ] Add S3/blob storage for PDFs
 - [ ] Background workers for async ingestion
 - [ ] Dockerfile and docker-compose setup
-- [ ] Add logging module
+- [x] Add logging module
 - [ ] Add more comprehensive tests
 - [ ] Support for other document types (DOCX, TXT)
 - [ ] Add evaluation metrics (RAGAS)

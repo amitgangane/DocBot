@@ -1,7 +1,11 @@
+import time
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.core.config import settings
+from app.core.logger import setup_logger
+
+logger = setup_logger("generation")
 
 
 def get_llm() -> ChatOpenAI:
@@ -31,7 +35,13 @@ Answer:""")
 
 def generate_answer(context: str, question: str) -> str:
     """Generate an answer using the LLM."""
+    start_time = time.time()
+    logger.debug(f"Generating answer for: \"{question[:50]}...\"")
+
     llm = get_llm()
     chain = RAG_PROMPT | llm
     response = chain.invoke({"context": context, "question": question})
+
+    elapsed = time.time() - start_time
+    logger.info(f"LLM response: {len(response.content)} chars in {elapsed:.2f}s")
     return response.content

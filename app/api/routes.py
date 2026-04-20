@@ -1,9 +1,13 @@
 import os
 import shutil
+import time
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from app.core.config import settings
+from app.core.logger import setup_logger
+
+logger = setup_logger("routes")
 from app.models import (
     HealthResponse,
     IngestResponse,
@@ -34,7 +38,11 @@ async def ingest_pdf(file: UploadFile = File(...)):
     """
     Upload a PDF file, parse it, chunk it, and store embeddings.
     """
+    start_time = time.time()
+    logger.info(f"Ingesting PDF: {file.filename}")
+
     if not file.filename.endswith(".pdf"):
+        logger.warning(f"Invalid file type: {file.filename}")
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     file_path = os.path.join(settings.UPLOAD_DIR, file.filename)
@@ -46,21 +54,30 @@ async def ingest_pdf(file: UploadFile = File(...)):
     # Parse PDF
     try:
         docs = load_pdf(file_path)
+        logger.debug(f"Parsed {len(docs)} pages from PDF")
     except Exception as e:
+        logger.error(f"Failed to parse PDF: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)}")
 
     # Chunk documents
     try:
         chunks = chunk_documents(docs)
+        logger.debug(f"Created {len(chunks)} chunks")
     except Exception as e:
+        logger.error(f"Failed to chunk document: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to chunk document: {str(e)}")
 
     # Add to vector store
     try:
         vectorstore = get_vectorstore()
         vectorstore.add_documents(chunks)
+        logger.info(f"Added {len(chunks)} chunks to vector store")
     except Exception as e:
+        logger.error(f"Failed to embed chunks: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to embed chunks: {str(e)}")
+
+    elapsed = time.time() - start_time
+    logger.info(f"Ingestion complete: {file.filename} ({len(chunks)} chunks) in {elapsed:.2f}s")
 
     return IngestResponse(
         filename=file.filename,
@@ -109,8 +126,14 @@ async def query_documents(request: QueryRequest):
     Query the RAG system with a question.
     Uses LangGraph pipeline with conversation memory.
     """
+    start_time = time.time()
+    logger.info(f"Query received: \"{request.question[:50]}...\" thread_id={request.thread_id}")
+
     try:
         result = rag_query(request.question, thread_id=request.thread_id)
+        elapsed = time.time() - start_time
+        logger.info(f"Query complete: {result['sources']} sources in {elapsed:.2f}s")
         return QueryResponse(answer=result["answer"], sources=result["sources"])
     except Exception as e:
+        logger.error(f"Query failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")

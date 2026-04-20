@@ -5,6 +5,9 @@ load_dotenv()
 
 
 class Settings:
+    # Logging
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+
     # OpenAI
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
