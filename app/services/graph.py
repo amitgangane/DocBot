@@ -4,6 +4,7 @@ import sqlite3
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 
+from app.core.config import settings
 from app.services.state import AgentState
 from app.services.nodes import (
     rewrite_query_node,
@@ -19,12 +20,32 @@ _checkpointer = None
 _graph = None
 
 
-def get_checkpointer() -> SqliteSaver:
-    """Get or create SQLite checkpointer for persistent memory."""
+def get_checkpointer():
+    """Get or create checkpointer for persistent memory.
+
+    Uses PostgreSQL (Supabase) if configured, otherwise falls back to SQLite.
+    """
     global _checkpointer
     if _checkpointer is None:
-        conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
-        _checkpointer = SqliteSaver(conn)
+        if settings.SUPABASE_DB_URL:
+            # Use Supabase PostgreSQL
+            from psycopg import Connection
+            from psycopg.rows import dict_row
+            from langgraph.checkpoint.postgres import PostgresSaver
+
+            conn = Connection.connect(
+                settings.SUPABASE_DB_URL,
+                autocommit=True,
+                row_factory=dict_row,
+            )
+            _checkpointer = PostgresSaver(conn)
+            _checkpointer.setup()  # Create tables if they don't exist
+            print("Using Supabase PostgreSQL for chat history")
+        else:
+            # Fallback to SQLite for local development
+            conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
+            _checkpointer = SqliteSaver(conn)
+            print("Using SQLite for chat history (set SUPABASE_DB_URL for PostgreSQL)")
     return _checkpointer
 
 

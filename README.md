@@ -8,7 +8,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 - Document chunking with configurable size/overlap
 - Vector embeddings using OpenAI `text-embedding-3-small`
 - Cross-encoder reranking for improved retrieval accuracy
-- Conversation memory with persistent chat history
+- Conversation memory with Supabase PostgreSQL (or SQLite fallback)
 - Query rewriting for natural follow-up questions
 - Cloud vector storage with Qdrant
 - RAG-based Q&A using GPT-4o-mini
@@ -44,7 +44,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 │   └────────┬────────┘                                               │
 │            ↓                                                        │
 │   ┌─────────────────┐                                               │
-│   │ Update Memory   │  → Save Q&A to chat history (SQLite)          │
+│   │ Update Memory   │  → Save Q&A to chat history (Supabase/SQLite)  │
 │   └────────┬────────┘                                               │
 │            ↓                                                        │
 │       Response                                                      │
@@ -85,7 +85,7 @@ DocBot/
 │
 ├── tests/                      # Unit tests
 ├── workers/                    # Background jobs (future)
-├── checkpoints.db              # SQLite conversation memory
+├── checkpoints.db              # SQLite fallback (when Supabase not configured)
 ├── requirements.txt
 ├── .env
 └── README.md
@@ -121,6 +121,10 @@ EMBEDDING_DIMENSIONS=1536
 QDRANT_URL=https://your-cluster.cloud.qdrant.io:6333
 QDRANT_API_KEY=your_qdrant_api_key
 QDRANT_COLLECTION_NAME=RAG-app
+
+# Supabase PostgreSQL (for chat history)
+# Use the Connection Pooler URL (not direct connection) to avoid IPv6 issues
+SUPABASE_DB_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres
 
 # Retrieval & Reranking
 RERANKER_INITIAL_K=10    # Docs to fetch before reranking
@@ -184,7 +188,7 @@ The follow-up query automatically rewrites "it" to "the Transformer" using conve
 
 ## Conversation Memory
 
-DocBot uses LangGraph with SQLite checkpointing for conversation memory:
+DocBot uses LangGraph with Supabase PostgreSQL for conversation memory (falls back to SQLite if not configured):
 
 - **Same `thread_id`** = Same conversation (history shared)
 - **Different `thread_id`** = New conversation (fresh start)
@@ -244,6 +248,6 @@ View traces at: [smith.langchain.com](https://smith.langchain.com)
 - **Embeddings**: OpenAI text-embedding-3-small
 - **Reranker**: Cross-encoder (ms-marco-MiniLM-L6-v2)
 - **Vector Store**: Qdrant Cloud
-- **Memory**: SQLite (via LangGraph checkpointer)
+- **Memory**: Supabase PostgreSQL (via LangGraph checkpointer, SQLite fallback)
 - **PDF Parsing**: PyMuPDF4LLM
 - **Observability**: LangSmith

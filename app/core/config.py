@@ -31,6 +31,9 @@ class Settings:
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "100"))
 
+    # Supabase PostgreSQL (for LangGraph checkpointer)
+    SUPABASE_DB_URL: str = os.getenv("SUPABASE_DB_URL", "")
+
     # Service URLs (for microservice mode)
     EMBEDDING_SERVICE_URL: str = os.getenv("EMBEDDING_URL", "http://localhost:8004")
 
