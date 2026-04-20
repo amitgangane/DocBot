@@ -1,6 +1,6 @@
 # DocBot - RAG Application
 
-A Retrieval-Augmented Generation (RAG) application for querying PDF documents using OpenAI, ChromaDB, and LangGraph.
+A Retrieval-Augmented Generation (RAG) application for querying PDF documents using OpenAI, Qdrant Cloud, and LangGraph.
 
 ## Features
 
@@ -10,7 +10,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 - Cross-encoder reranking for improved retrieval accuracy
 - Conversation memory with persistent chat history
 - Query rewriting for natural follow-up questions
-- Persistent storage with ChromaDB
+- Cloud vector storage with Qdrant
 - RAG-based Q&A using GPT-4o-mini
 - FastAPI REST API
 
@@ -62,7 +62,7 @@ DocBot/
 │   ├── core/
 │   │   └── config.py           # Centralized settings
 │   ├── db/
-│   │   └── vector_db.py        # ChromaDB client
+│   │   └── vector_db.py        # Qdrant Cloud client
 │   ├── models/
 │   │   ├── request.py          # Pydantic request models
 │   │   └── response.py         # Pydantic response models
@@ -115,7 +115,12 @@ LLM_MAX_TOKENS=500
 
 # Embedding Settings
 EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIMENSIONS=1024
+EMBEDDING_DIMENSIONS=1536
+
+# Qdrant Cloud
+QDRANT_URL=https://your-cluster.cloud.qdrant.io:6333
+QDRANT_API_KEY=your_qdrant_api_key
+QDRANT_COLLECTION_NAME=RAG-app
 
 # Retrieval & Reranking
 RERANKER_INITIAL_K=10    # Docs to fetch before reranking
@@ -211,7 +216,7 @@ LANGCHAIN_PROJECT=doc-bot-project
 |-----------|-------------|
 | Graph Execution | Full LangGraph run with all nodes |
 | Query Rewrite | Input/output of rewrite node |
-| Retrieval | ChromaDB similarity search |
+| Retrieval | Qdrant similarity search |
 | Reranker | Cross-encoder scoring |
 | Generation | LLM prompts, responses, tokens, latency |
 | Memory | Chat history updates |
@@ -238,7 +243,7 @@ View traces at: [smith.langchain.com](https://smith.langchain.com)
 - **LLM**: OpenAI GPT-4o-mini
 - **Embeddings**: OpenAI text-embedding-3-small
 - **Reranker**: Cross-encoder (ms-marco-MiniLM-L6-v2)
-- **Vector Store**: ChromaDB
+- **Vector Store**: Qdrant Cloud
 - **Memory**: SQLite (via LangGraph checkpointer)
 - **PDF Parsing**: PyMuPDF4LLM
 - **Observability**: LangSmith
