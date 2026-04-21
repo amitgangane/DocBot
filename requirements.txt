@@ -4,6 +4,7 @@ uvicorn[standard]
 python-dotenv
 pydantic
 httpx
+python-multipart
 
 # LangChain
 langchain

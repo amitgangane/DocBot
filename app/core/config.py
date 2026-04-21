@@ -41,7 +41,7 @@ class Settings:
     SUPABASE_DB_URL: str = os.getenv("SUPABASE_DB_URL", "")
 
     # Redis Cache
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    REDIS_URL: str = os.getenv("REDIS_URL", "")
     CACHE_ENABLED: bool = os.getenv("CACHE_ENABLED", "true").lower() == "true"
     CACHE_TTL_RESPONSE: int = int(os.getenv("CACHE_TTL_RESPONSE", "3600"))  # 1 hour
     CACHE_TTL_EMBEDDING: int = int(os.getenv("CACHE_TTL_EMBEDDING", "86400"))  # 24 hours
