@@ -16,9 +16,12 @@ from app.models import (
     CountResponse,
     QueryRequest,
     QueryResponse,
+    CacheStatsResponse,
+    CacheClearResponse,
 )
 from app.db.vector_db import get_vectorstore, get_chunk_count
 from app.services.rag_service import query as rag_query
+from app.core.cache import cache_stats, cache_clear_all, invalidate_on_ingest
 from ingestion.loader import load_pdf
 from ingestion.chunking import chunk_documents
 
@@ -75,6 +78,9 @@ async def ingest_pdf(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Failed to embed chunks: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to embed chunks: {str(e)}")
+
+    # Invalidate document-dependent caches
+    invalidate_on_ingest()
 
     elapsed = time.time() - start_time
     logger.info(f"Ingestion complete: {file.filename} ({len(chunks)} chunks) in {elapsed:.2f}s")
@@ -137,3 +143,18 @@ async def query_documents(request: QueryRequest):
     except Exception as e:
         logger.error(f"Query failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
+
+
+@router.get("/cache/stats", response_model=CacheStatsResponse)
+async def get_cache_stats():
+    """Get cache statistics."""
+    stats = cache_stats()
+    return CacheStatsResponse(**stats)
+
+
+@router.post("/cache/clear", response_model=CacheClearResponse)
+async def clear_cache():
+    """Clear all caches."""
+    cleared = cache_clear_all()
+    logger.info(f"Cache cleared: {cleared} keys")
+    return CacheClearResponse(status="success", keys_cleared=cleared)

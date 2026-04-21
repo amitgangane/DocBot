@@ -11,6 +11,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 - Conversation memory with Supabase PostgreSQL (or SQLite fallback)
 - Query rewriting for natural follow-up questions
 - Cloud vector storage with Qdrant
+- Redis caching for improved performance
 - RAG-based Q&A using GPT-4o-mini
 - FastAPI REST API
 
@@ -136,6 +137,13 @@ RETRIEVER_K=5            # Final docs after reranking
 # Chunking
 CHUNK_SIZE=500
 CHUNK_OVERLAP=100
+
+# Redis Cache
+REDIS_URL=redis://localhost:6379/0
+CACHE_ENABLED=true
+CACHE_TTL_RESPONSE=3600      # 1 hour
+CACHE_TTL_RETRIEVAL=3600     # 1 hour
+CACHE_TTL_RERANKER=3600      # 1 hour
 ```
 
 ### 3. Run the application
@@ -156,6 +164,8 @@ Swagger docs at: `http://localhost:8000/docs`
 | POST | `/embed` | Embed raw chunks |
 | GET | `/embed/count` | Get total chunk count |
 | POST | `/query` | Query documents with conversation memory |
+| GET | `/cache/stats` | Get cache statistics |
+| POST | `/cache/clear` | Clear all caches |
 
 ### Example: Upload PDF
 
@@ -265,10 +275,52 @@ LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
 | `graph` | Checkpointer initialization |
 | `vector_db` | Qdrant connection status |
 
+## Caching
+
+DocBot uses Redis for multi-layer caching to improve performance.
+
+### Setup
+
+Start Redis with Docker:
+
+```bash
+docker run -d --name docbot-redis -p 6379:6379 redis
+```
+
+### Cache Layers
+
+| Layer | Cache Key | TTL | Description |
+|-------|-----------|-----|-------------|
+| Response | `response:{query_hash}` | 1 hour | Full answer for repeated questions |
+| Retrieval | `retrieve:{query_hash}` | 1 hour | Document search results |
+| Reranker | `rerank:{query+docs_hash}` | 1 hour | Reranked document order |
+
+### Cache Invalidation
+
+- **Automatic**: Caches are invalidated when new PDFs are ingested
+- **Manual**: Use `POST /cache/clear` to clear all caches
+
+### Performance Gains
+
+| Scenario | Without Cache | With Cache |
+|----------|---------------|------------|
+| Repeated query | ~3-4 seconds | ~50ms |
+| Same docs reranked | ~3-4 seconds | ~2.5 seconds |
+
+### Configuration
+
+```env
+REDIS_URL=redis://localhost:6379/0
+CACHE_ENABLED=true              # Set to false to disable caching
+CACHE_TTL_RESPONSE=3600         # 1 hour
+CACHE_TTL_RETRIEVAL=3600        # 1 hour
+CACHE_TTL_RERANKER=3600         # 1 hour
+```
+
 ## TODO / Roadmap
 
 - [ ] **Duplicate detection**: Add content-based hashing to prevent duplicate chunks
-- [ ] Add Redis caching for frequent queries
+- [x] Add Redis caching for frequent queries
 - [ ] Add S3/blob storage for PDFs
 - [ ] Background workers for async ingestion
 - [ ] Dockerfile and docker-compose setup
@@ -287,5 +339,6 @@ LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
 - **Reranker**: Cross-encoder (ms-marco-MiniLM-L6-v2)
 - **Vector Store**: Qdrant Cloud
 - **Memory**: Supabase PostgreSQL (via LangGraph checkpointer, SQLite fallback)
+- **Cache**: Redis
 - **PDF Parsing**: PyMuPDF4LLM
 - **Observability**: LangSmith

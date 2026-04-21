@@ -5,4 +5,6 @@ from .response import (
     EmbedResponse,
     CountResponse,
     QueryResponse,
+    CacheStatsResponse,
+    CacheClearResponse,
 )

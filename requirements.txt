@@ -24,6 +24,9 @@ psycopg[binary]
 langchain-qdrant
 qdrant-client
 
+# Caching
+redis
+
 # Testing & Evaluation
 pytest
 ragas

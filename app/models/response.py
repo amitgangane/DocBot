@@ -29,3 +29,17 @@ class CountResponse(BaseModel):
 class QueryResponse(BaseModel):
     answer: str
     sources: int
+
+
+class CacheStatsResponse(BaseModel):
+    enabled: bool
+    connected: bool
+    memory_used: str = None
+    keys: dict = None
+    total_keys: int = None
+    error: str = None
+
+
+class CacheClearResponse(BaseModel):
+    status: str
+    keys_cleared: int

@@ -40,6 +40,14 @@ class Settings:
     # Supabase PostgreSQL (for LangGraph checkpointer)
     SUPABASE_DB_URL: str = os.getenv("SUPABASE_DB_URL", "")
 
+    # Redis Cache
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    CACHE_ENABLED: bool = os.getenv("CACHE_ENABLED", "true").lower() == "true"
+    CACHE_TTL_RESPONSE: int = int(os.getenv("CACHE_TTL_RESPONSE", "3600"))  # 1 hour
+    CACHE_TTL_EMBEDDING: int = int(os.getenv("CACHE_TTL_EMBEDDING", "86400"))  # 24 hours
+    CACHE_TTL_RETRIEVAL: int = int(os.getenv("CACHE_TTL_RETRIEVAL", "3600"))  # 1 hour
+    CACHE_TTL_RERANKER: int = int(os.getenv("CACHE_TTL_RERANKER", "3600"))  # 1 hour
+
     # Service URLs (for microservice mode)
     EMBEDDING_SERVICE_URL: str = os.getenv("EMBEDDING_URL", "http://localhost:8004")
 
