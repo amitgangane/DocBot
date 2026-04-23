@@ -456,3 +456,7 @@ DocBot uses Upstash Redis (serverless) for multi-layer caching:
 - [x] Per-document listing and deletion in Qdrant
 - [x] Source persistence for newer thread history entries
 - [x] LangSmith tracing across the RAG pipeline
+
+## Demo
+
+**Google Drive:** https://drive.google.com/file/d/191vjtXJAwm_HMQT0eacI2lyPi1dkMtdr/view?usp=drive_link
