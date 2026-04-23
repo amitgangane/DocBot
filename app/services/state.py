@@ -11,4 +11,5 @@ class AgentState(TypedDict):
     reranked_docs: List[Document]
     context: str
     answer: str
+    source_items: List[dict]
     chat_history: List[BaseMessage]

@@ -3,42 +3,89 @@
 @tailwind utilities;
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #f7f9fb;
+  --foreground: #191c1e;
+  --panel: #ffffff;
 }
 
+html,
 body {
   color: var(--foreground);
   background: var(--background);
+  font-family: "Inter", "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(100, 116, 139, 0.22);
+  color: #191c1e;
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a2e;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3b82f6;
-  border-radius: 3px;
+  background: #d5dbe0;
+  border-radius: 999px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d5dbe0 transparent;
 }
 
 /* Markdown styling */
+.prose {
+  color: #3c494e;
+}
+
+.prose p,
+.prose li {
+  line-height: 1.75;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  color: #191c1e;
+  font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.prose a {
+  color: #374151;
+}
+
+.prose strong {
+  color: #191c1e;
+}
+
 .prose pre {
-  background: #1e1e2e;
-  border-radius: 8px;
+  background: #f2f4f6;
+  border: 1px solid #e0e3e5;
+  border-radius: 16px;
   padding: 1rem;
   overflow-x: auto;
 }
 
 .prose code {
-  background: #1e1e2e;
+  background: #f2f4f6;
   padding: 0.2rem 0.4rem;
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 0.9em;
+  color: #334155;
 }
 
 .prose pre code {
@@ -54,8 +101,9 @@ body {
 .katex-display {
   margin: 1rem 0;
   padding: 1rem;
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 8px;
+  background: #f2f4f6;
+  border: 1px solid #e0e3e5;
+  border-radius: 18px;
   overflow-x: auto;
 }
 
@@ -77,15 +125,15 @@ body {
 .katex .mclose,
 .katex .mpunct,
 .katex .minner {
-  color: #e2e8f0;
+  color: #191c1e;
 }
 
 /* Fraction lines */
 .katex .frac-line {
-  border-color: #e2e8f0;
+  border-color: #191c1e;
 }
 
 /* Square root lines */
 .katex .sqrt-line {
-  border-color: #e2e8f0;
+  border-color: #191c1e;
 }

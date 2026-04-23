@@ -1,6 +1,7 @@
 """LangGraph nodes for the RAG pipeline."""
 
 import tiktoken
+from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, AIMessage, trim_messages
 from langchain_openai import ChatOpenAI
 
@@ -44,6 +45,30 @@ def count_tokens(messages) -> int:
         # Approximate token count: content + role overhead
         total += len(encoder.encode(msg.content)) + 4  # 4 tokens overhead per message
     return total
+
+
+def _build_source_items(docs: list[Document]) -> list[dict]:
+    """Create stable source metadata for persistence in chat history."""
+    source_items: list[dict] = []
+    seen_keys: set[tuple[str, int | None, str | None]] = set()
+
+    for doc in docs:
+        metadata = doc.metadata or {}
+        item = {
+            "document_id": metadata.get("document_id") or metadata.get("source_path") or "unknown-document",
+            "filename": metadata.get("filename") or metadata.get("source") or "Unknown source",
+            "source_path": metadata.get("source_path") or metadata.get("source") or "",
+            "page_number": metadata.get("page_number") or metadata.get("page"),
+            "chunk_id": metadata.get("chunk_id"),
+            "excerpt": doc.page_content[:260].strip(),
+        }
+        dedupe_key = (item["document_id"], item["page_number"], item["chunk_id"])
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+        source_items.append(item)
+
+    return source_items
 
 def rewrite_query_node(state: AgentState) -> dict:
     """Rewrite query using a token-aware trimmer."""
@@ -110,7 +135,10 @@ def build_context_node(state: AgentState) -> dict:
     """Build context string from reranked documents."""
     context = "\n\n".join([doc.page_content for doc in state["reranked_docs"]])
     logger.debug(f"Built context: {len(context)} chars")
-    return {"context": context}
+    return {
+        "context": context,
+        "source_items": _build_source_items(state["reranked_docs"]),
+    }
 
 
 def generate_node(state: AgentState) -> dict:
@@ -130,6 +158,11 @@ def update_memory_node(state: AgentState) -> dict:
     """Update chat history with current Q&A pair."""
     history = list(state.get("chat_history", []))
     history.append(HumanMessage(content=state["query"]))
-    history.append(AIMessage(content=state["answer"]))
+    history.append(
+        AIMessage(
+            content=state["answer"],
+            additional_kwargs={"source_items": state.get("source_items", [])},
+        )
+    )
     logger.debug(f"Updated chat history: {len(history)} messages")
     return {"chat_history": history}

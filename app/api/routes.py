@@ -1,6 +1,7 @@
 import os
 import shutil
 import time
+from uuid import uuid4
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
@@ -12,6 +13,8 @@ logger = setup_logger("routes")
 from app.models import (
     HealthResponse,
     IngestResponse,
+    IndexedDocumentResponse,
+    DeleteDocumentResponse,
     EmbedRequest,
     EmbedResponse,
     CountResponse,
@@ -20,7 +23,12 @@ from app.models import (
     CacheStatsResponse,
     CacheClearResponse,
 )
-from app.db.vector_db import get_vectorstore, get_chunk_count
+from app.db.vector_db import (
+    get_vectorstore,
+    get_chunk_count,
+    list_indexed_documents,
+    delete_indexed_document,
+)
 from app.services.rag_service import query as rag_query, query_stream
 from app.core.cache import cache_stats, cache_clear_all, invalidate_on_ingest
 from ingestion.loader import load_pdf
@@ -29,6 +37,28 @@ from ingestion.chunking import chunk_documents
 router = APIRouter()
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+
+def _annotate_loaded_docs(docs: list, *, file_path: str, filename: str, document_id: str) -> list:
+    """Stamp stable source metadata onto each loaded page document."""
+    for page_index, doc in enumerate(docs, start=1):
+        metadata = dict(getattr(doc, "metadata", {}) or {})
+        metadata["document_id"] = document_id
+        metadata["filename"] = filename
+        metadata["source_path"] = file_path
+        metadata["page_number"] = metadata.get("page_number") or metadata.get("page") or page_index
+        doc.metadata = metadata
+    return docs
+
+
+def _annotate_chunks(chunks: list, *, document_id: str) -> list:
+    """Stamp stable chunk-level metadata for downstream source display."""
+    for chunk_index, chunk in enumerate(chunks, start=1):
+        metadata = dict(getattr(chunk, "metadata", {}) or {})
+        metadata["chunk_id"] = f"{document_id}:chunk-{chunk_index}"
+        metadata["chunk_index"] = chunk_index
+        chunk.metadata = metadata
+    return chunks
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -57,7 +87,13 @@ async def ingest_pdf(file: UploadFile = File(...)):
 
     # Parse PDF
     try:
-        docs = load_pdf(file_path)
+        document_id = str(uuid4())
+        docs = _annotate_loaded_docs(
+            load_pdf(file_path),
+            file_path=file_path,
+            filename=file.filename,
+            document_id=document_id,
+        )
         logger.debug(f"Parsed {len(docs)} pages from PDF")
     except Exception as e:
         logger.error(f"Failed to parse PDF: {str(e)}")
@@ -65,7 +101,7 @@ async def ingest_pdf(file: UploadFile = File(...)):
 
     # Chunk documents
     try:
-        chunks = chunk_documents(docs)
+        chunks = _annotate_chunks(chunk_documents(docs), document_id=document_id)
         logger.debug(f"Created {len(chunks)} chunks")
     except Exception as e:
         logger.error(f"Failed to chunk document: {str(e)}")
@@ -91,8 +127,42 @@ async def ingest_pdf(file: UploadFile = File(...)):
         status="success",
         pages_parsed=len(docs),
         chunk_count=len(chunks),
+        document_id=document_id,
         message=f"Successfully ingested {file.filename}",
     )
+
+
+@router.get("/documents", response_model=list[IndexedDocumentResponse])
+async def get_documents():
+    """List indexed documents available in the vector store."""
+    try:
+        return list_indexed_documents()
+    except Exception as e:
+        logger.error(f"Failed to list indexed documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list indexed documents: {str(e)}")
+
+
+@router.delete("/documents/{document_id}", response_model=DeleteDocumentResponse)
+async def delete_document(document_id: str):
+    """Delete an indexed document from the vector store by document id."""
+    try:
+        chunks_deleted = delete_indexed_document(document_id)
+        if chunks_deleted == 0:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        invalidate_on_ingest()
+        logger.info(f"Deleted indexed document {document_id} ({chunks_deleted} chunks)")
+        return DeleteDocumentResponse(
+            status="success",
+            document_id=document_id,
+            chunks_deleted=chunks_deleted,
+            message=f"Deleted document {document_id} from the index",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete indexed document {document_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete indexed document: {str(e)}")
 
 
 @router.post("/embed", response_model=EmbedResponse)
@@ -140,7 +210,11 @@ async def query_documents(request: QueryRequest):
         result = await rag_query(request.question, thread_id=request.thread_id)
         elapsed = time.time() - start_time
         logger.info(f"Query complete: {result['sources']} sources in {elapsed:.2f}s")
-        return QueryResponse(answer=result["answer"], sources=result["sources"])
+        return QueryResponse(
+            answer=result["answer"],
+            sources=result["sources"],
+            source_items=result.get("source_items", []),
+        )
     except Exception as e:
         logger.error(f"Query failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
@@ -189,7 +263,8 @@ async def get_thread_history(thread_id: str):
         for msg in chat_history:
             messages.append({
                 "role": "user" if msg.type == "human" else "assistant",
-                "content": msg.content
+                "content": msg.content,
+                "source_items": getattr(msg, "additional_kwargs", {}).get("source_items", []),
             })
 
         return {"messages": messages}

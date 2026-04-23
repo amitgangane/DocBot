@@ -6,11 +6,36 @@ class HealthResponse(BaseModel):
     service: str
 
 
+class SourceItemResponse(BaseModel):
+    document_id: str
+    filename: str
+    source_path: str
+    page_number: int | None = None
+    chunk_id: str | None = None
+    excerpt: str
+
+
 class IngestResponse(BaseModel):
     filename: str
     status: str
     pages_parsed: int
     chunk_count: int
+    message: str
+    document_id: str | None = None
+
+
+class IndexedDocumentResponse(BaseModel):
+    document_id: str
+    filename: str
+    source_path: str
+    chunk_count: int
+    page_count: int | None = None
+
+
+class DeleteDocumentResponse(BaseModel):
+    status: str
+    document_id: str
+    chunks_deleted: int
     message: str
 
 
@@ -29,6 +54,7 @@ class CountResponse(BaseModel):
 class QueryResponse(BaseModel):
     answer: str
     sources: int
+    source_items: list[SourceItemResponse] = []
 
 
 class CacheStatsResponse(BaseModel):

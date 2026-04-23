@@ -8,6 +8,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
   - PDF upload and parsing (with image and table extraction)
   - Document chunking with configurable size/overlap
   - Vector embeddings using OpenAI `text-embedding-3-small`
+  - Stable document metadata (`document_id`, `filename`, `source_path`, `chunk_id`) on ingestion
   - Cross-encoder reranking for improved retrieval accuracy
   - Conversation memory with async LangGraph checkpointing
   - Supabase PostgreSQL checkpointer with in-memory fallback for local/dev use
@@ -15,14 +16,17 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
   - Cloud vector storage with Qdrant
   - Redis caching (Upstash) for improved performance
   - Streaming responses via Server-Sent Events (SSE)
+  - Document listing and per-document deletion from Qdrant
   - RAG-based Q&A using GPT-4o-mini
 
 - **Frontend (Next.js)**
-  - Modern chat interface with dark theme
+  - Clean light-theme chat interface with a fixed left sidebar
   - Real-time token-by-token streaming responses
-  - PDF upload support
+  - Floating PDF manager for upload and document deletion
   - Conversation history sidebar
   - Thread persistence across sessions
+  - Compact source chips with expandable source details
+  - Thread reloads with persisted source metadata for newer answers
 
 ## Architecture
 
@@ -38,8 +42,9 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 │   │                 │         │  │ /query  │    │ LangGraph       │     │   │
 │   │  - Chat UI      │◄─────── │  │ /query/ │───►│ Pipeline        │     │   │
 │   │  - Streaming UI │   SSE   │  │ stream  │    │                 │     │   │
-│   │  - PDF Upload   │   SSE   │  │ /upload │    │                 │     │   │
-│   │  - Thread List  │         │  └─────────┘    └────────┬────────┘     │   │
+│   │  - PDF Manager  │         │  │ /ingest │    │                 │     │   │
+│   │  - Thread List  │         │  │ /documents     │                │     │   │
+│   │  - Source Chips │         │  └─────────┘    └────────┬────────┘     │   │
 │   └─────────────────┘         │                          │              │   │
 │                               │                          ▼              │   │
 │                               │  ┌──────────────────────────────────┐   │   │
@@ -98,7 +103,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 DocBot/
 ├── app/                        # FastAPI Backend
 │   ├── api/
-│   │   └── routes.py           # API endpoints (query, stream, upload, history)
+│   │   └── routes.py           # API endpoints (query, stream, upload, documents, history)
 │   ├── core/
 │   │   ├── config.py           # Centralized settings
 │   │   ├── cache.py            # Redis caching (Upstash)
@@ -222,6 +227,8 @@ npm run dev
 |--------|----------|-------------|
 | GET | `/health` | Health check |
 | POST | `/ingest/upload` | Upload and index a PDF |
+| GET | `/documents` | List indexed PDFs available for retrieval |
+| DELETE | `/documents/{document_id}` | Delete one indexed PDF from Qdrant |
 | POST | `/query` | Query documents (non-streaming) |
 | POST | `/query/stream` | Query documents (streaming SSE) |
 | GET | `/threads/{thread_id}/history` | Get conversation history |
@@ -240,8 +247,11 @@ curl -X POST "http://localhost:8001/query/stream" \
 
 Response (Server-Sent Events):
 ```
+event: status
+data: {"message": "Searching the document index"}
+
 event: metadata
-data: {"sources": 5}
+data: {"sources": 5, "source_items": [{"document_id": "...", "filename": "RAG_LLM.pdf", "source_path": "./documents/RAG_LLM.pdf", "page_number": 9, "chunk_id": "...", "excerpt": "..."}]}
 
 event: token
 data: {"token": "The"}
@@ -262,6 +272,41 @@ Possible error event:
 ```text
 event: error
 data: {"message": "Stream query failed"}
+```
+
+### Example: List Indexed Documents
+
+```bash
+curl "http://localhost:8001/documents"
+```
+
+Response:
+```json
+[
+  {
+    "document_id": "c1712875-8ae7-4dd9-a0bd-97af9be5aaae",
+    "filename": "RAG_LLM.pdf",
+    "source_path": "./documents/RAG_LLM.pdf",
+    "chunk_count": 352,
+    "page_count": 20
+  }
+]
+```
+
+### Example: Delete One Indexed Document
+
+```bash
+curl -X DELETE "http://localhost:8001/documents/c1712875-8ae7-4dd9-a0bd-97af9be5aaae"
+```
+
+Response:
+```json
+{
+  "status": "success",
+  "document_id": "c1712875-8ae7-4dd9-a0bd-97af9be5aaae",
+  "chunks_deleted": 352,
+  "message": "Deleted document c1712875-8ae7-4dd9-a0bd-97af9be5aaae from the index"
+}
 ```
 
 ### Example: Get Thread History
@@ -318,6 +363,31 @@ DocBot uses LangGraph checkpointing for conversation memory:
 
 The backend query path and history path both use LangGraph's async checkpoint APIs, which is required when running with the async Postgres saver.
 
+## Document Indexing And Sources
+
+Each uploaded PDF is stored in Qdrant as chunked embeddings with stable metadata:
+
+- `document_id` identifies one uploaded PDF across all chunks
+- `filename` and `source_path` are used for document listing and source display
+- `page_number` is used to show page references in answers
+- `chunk_id` and `chunk_index` help with traceability and deletion
+
+This metadata powers two user-facing features:
+
+- the `Documents` section in the frontend PDF manager
+- source chips and expandable source details under assistant answers
+
+If you reset or rebuild the Qdrant collection, re-upload your PDFs so every chunk has the latest metadata schema.
+
+## Frontend Notes
+
+- The chat UI uses `/query/stream` and renders tokens incrementally.
+- Before answer tokens arrive, the assistant bubble can show step-by-step retrieval status.
+- Source references are shown as compact chips by default, with full excerpts hidden behind `Show details`.
+- The PDF manager is a floating panel that lets you upload files, inspect indexed PDFs, and delete documents from the vector store.
+- Thread history now restores saved `source_items` for answers that were generated after source persistence was added.
+- The current UI is intentionally minimal: one upload entry point in the composer, one `Documents` list in the upload manager, and a cleaner empty state for new chats.
+
 ## Caching
 
 DocBot uses Upstash Redis (serverless) for multi-layer caching:
@@ -349,16 +419,40 @@ DocBot uses Upstash Redis (serverless) for multi-layer caching:
 | **Backend Hosting** | Render |
 | **Frontend Hosting** | Vercel |
 
-## TODO / Roadmap
+## TODO
+
+### Highest Priority
+
+- [ ] Add backend and frontend tests for thread history, source persistence, and document deletion.
+- [ ] Improve thread-history reliability by surfacing backend health/status in the UI instead of only timing out.
+- [ ] Add a document-details endpoint or cached metadata store so the upload manager does not need to infer everything from vector payloads.
+
+### Product Improvements
+
+- [ ] Add duplicate-document detection using content hashing before ingestion.
+- [ ] Add drag-and-drop PDF upload and clearer upload progress states.
+- [ ] Add source preview actions such as copy excerpt or jump to page metadata.
+- [ ] Add thread rename and search in the sidebar.
+
+### Infrastructure
+
+- [ ] Add Dockerfile and docker-compose setup for local full-stack development.
+- [ ] Add durable blob storage for uploaded PDFs instead of relying only on the local upload directory.
+- [ ] Add optional background ingestion workers for larger PDFs or multi-user workloads.
+
+### Evaluation And Quality
+
+- [ ] Add retrieval and answer-quality evaluation, for example RAGAS or a smaller custom benchmark.
+- [ ] Add regression tests for UI states like source chips, thinking status panels, and document deletion.
+
+## Completed
 
 - [x] Redis caching for frequent queries
 - [x] Streaming responses (SSE)
 - [x] Next.js frontend with chat UI
 - [x] Conversation history in frontend
 - [x] Upstash Redis (serverless)
-- [ ] Duplicate detection (content-based hashing)
-- [ ] S3/blob storage for PDFs
-- [ ] Background workers for async ingestion
-- [ ] Dockerfile and docker-compose setup
-- [ ] Support for other document types (DOCX, TXT)
-- [ ] RAGAS evaluation metrics
+- [x] Document-level metadata on ingestion
+- [x] Per-document listing and deletion in Qdrant
+- [x] Source persistence for newer thread history entries
+- [x] LangSmith tracing across the RAG pipeline
