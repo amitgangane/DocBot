@@ -3,6 +3,7 @@ import shutil
 import time
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
 from app.core.logger import setup_logger
@@ -20,7 +21,7 @@ from app.models import (
     CacheClearResponse,
 )
 from app.db.vector_db import get_vectorstore, get_chunk_count
-from app.services.rag_service import query as rag_query
+from app.services.rag_service import query as rag_query, query_stream
 from app.core.cache import cache_stats, cache_clear_all, invalidate_on_ingest
 from ingestion.loader import load_pdf
 from ingestion.chunking import chunk_documents
@@ -136,13 +137,65 @@ async def query_documents(request: QueryRequest):
     logger.info(f"Query received: \"{request.question[:50]}...\" thread_id={request.thread_id}")
 
     try:
-        result = rag_query(request.question, thread_id=request.thread_id)
+        result = await rag_query(request.question, thread_id=request.thread_id)
         elapsed = time.time() - start_time
         logger.info(f"Query complete: {result['sources']} sources in {elapsed:.2f}s")
         return QueryResponse(answer=result["answer"], sources=result["sources"])
     except Exception as e:
         logger.error(f"Query failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
+
+
+@router.post("/query/stream")
+async def query_documents_stream(request: QueryRequest):
+    """
+    Query the RAG system with streaming response.
+    Returns Server-Sent Events (SSE) stream.
+
+    Events:
+    - metadata: {sources: int, rewritten_query: str}
+    - token: {token: str}
+    - done: {status: "complete"}
+    """
+    logger.info(f"Stream query received: \"{request.question[:50]}...\" thread_id={request.thread_id}")
+
+    return StreamingResponse(
+        query_stream(request.question, thread_id=request.thread_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@router.get("/threads/{thread_id}/history")
+async def get_thread_history(thread_id: str):
+    """Get chat history for a thread."""
+    from app.services.graph import get_rag_graph
+
+    try:
+        graph = get_rag_graph()
+        config = {"configurable": {"thread_id": thread_id}}
+        state = await graph.aget_state(config)
+
+        if not state.values:
+            return {"messages": []}
+
+        chat_history = state.values.get("chat_history", [])
+
+        # Convert LangChain messages to simple format
+        messages = []
+        for msg in chat_history:
+            messages.append({
+                "role": "user" if msg.type == "human" else "assistant",
+                "content": msg.content
+            })
+
+        return {"messages": messages}
+    except Exception as e:
+        logger.error(f"Failed to get thread history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get thread history: {str(e)}")
 
 
 @router.get("/cache/stats", response_model=CacheStatsResponse)

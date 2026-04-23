@@ -1,0 +1,28 @@
+# Render Blueprint for DocBot Backend
+# Deploy using: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: docbot-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: OPENAI_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: CACHE_ENABLED
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+    healthCheckPath: /health

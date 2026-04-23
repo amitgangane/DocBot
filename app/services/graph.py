@@ -1,8 +1,13 @@
 """LangGraph RAG pipeline."""
 
-import sqlite3
+import asyncio
+import threading
+from typing import Any
+
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.memory import MemorySaver
+from psycopg_pool import AsyncConnectionPool
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.core.config import settings
 from app.core.logger import setup_logger
@@ -19,38 +24,96 @@ from app.services.nodes import (
 )
 
 # Persistent checkpointer (singleton)
-_checkpointer = None
+_checkpointer: Any = None
 _graph = None
+_pool = None
+_loop: asyncio.AbstractEventLoop | None = None
+_loop_thread: threading.Thread | None = None
 
+
+def _run_background_loop(loop: asyncio.AbstractEventLoop):
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
+async def _create_async_checkpointer():
+    pool = AsyncConnectionPool(
+        conninfo=settings.SUPABASE_DB_URL,
+        max_size=20,
+        kwargs={"autocommit": True, "prepare_threshold": None},
+    )
+    saver = AsyncPostgresSaver(pool)
+    await saver.setup()
+    return saver, pool
+
+
+def _reset_async_runtime():
+    global _pool, _loop, _loop_thread
+    _pool = None
+    _loop = None
+    _loop_thread = None
+
+
+def _init_checkpointer_sync():
+    """Initialize a checkpointer that works in both FastAPI and langgraph dev."""
+    global _checkpointer, _pool, _loop, _loop_thread
+
+    if _checkpointer is not None:
+        return
+
+    if settings.SUPABASE_DB_URL:
+        loop = asyncio.new_event_loop()
+        thread = threading.Thread(
+            target=_run_background_loop,
+            args=(loop,),
+            daemon=True,
+            name="langgraph-checkpointer-loop",
+        )
+        thread.start()
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(_create_async_checkpointer(), loop)
+            saver, pool = future.result()
+        except Exception:
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout=1)
+            _reset_async_runtime()
+            raise
+
+        _loop = loop
+        _loop_thread = thread
+        _pool = pool
+        _checkpointer = saver
+        logger.info("Async Postgres checkpointer initialized")
+    else:
+        _checkpointer = MemorySaver()
+        logger.info("Using in-memory checkpointer")
+
+async def init_checkpointer():
+    """Initialize checkpointer once at app startup."""
+    _init_checkpointer_sync()
+
+
+async def close_checkpointer():
+    """Cleanly close pooled checkpointer resources."""
+    global _checkpointer, _graph, _pool, _loop, _loop_thread
+
+    if _pool is not None and _loop is not None:
+        future = asyncio.run_coroutine_threadsafe(_pool.close(), _loop)
+        future.result()
+        _loop.call_soon_threadsafe(_loop.stop)
+        if _loop_thread is not None:
+            _loop_thread.join(timeout=1)
+        logger.info("Checkpointer connection pool closed")
+
+    _checkpointer = None
+    _graph = None
+    _reset_async_runtime()
 
 def get_checkpointer():
-    """Get or create checkpointer for persistent memory.
-
-    Uses PostgreSQL (Supabase) if configured, otherwise falls back to SQLite.
-    """
-    global _checkpointer
     if _checkpointer is None:
-        if settings.SUPABASE_DB_URL:
-            # Use Supabase PostgreSQL
-            from psycopg import Connection
-            from psycopg.rows import dict_row
-            from langgraph.checkpoint.postgres import PostgresSaver
-
-            conn = Connection.connect(
-                settings.SUPABASE_DB_URL,
-                autocommit=True,
-                row_factory=dict_row,
-            )
-            _checkpointer = PostgresSaver(conn)
-            _checkpointer.setup()  # Create tables if they don't exist
-            logger.info("Using Supabase PostgreSQL for chat history")
-        else:
-            # Fallback to SQLite for local development
-            conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
-            _checkpointer = SqliteSaver(conn)
-            logger.info("Using SQLite for chat history (set SUPABASE_DB_URL for PostgreSQL)")
+        _init_checkpointer_sync()
     return _checkpointer
-
 
 def build_rag_graph() -> StateGraph:
     """Build the RAG pipeline graph."""
@@ -77,12 +140,12 @@ def build_rag_graph() -> StateGraph:
 
 
 def get_rag_graph():
-    """Get compiled RAG graph (singleton)."""
     global _graph
+
     if _graph is None:
         logger.info("Building RAG graph...")
         graph = build_rag_graph()
-        checkpointer = get_checkpointer()
-        _graph = graph.compile(checkpointer=checkpointer)
+        _graph = graph.compile(checkpointer=get_checkpointer())
         logger.info("RAG graph compiled successfully")
+
     return _graph

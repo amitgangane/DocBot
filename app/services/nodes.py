@@ -1,5 +1,6 @@
 """LangGraph nodes for the RAG pipeline."""
 
+import tiktoken
 from langchain_core.messages import HumanMessage, AIMessage, trim_messages
 from langchain_openai import ChatOpenAI
 
@@ -8,20 +9,41 @@ from app.core.logger import setup_logger
 from app.services.state import AgentState
 from app.services.retrieval import search_similar
 from app.services.reranker import rerank_documents
-from app.services.generation import generate_answer
+from app.services.generation import get_llm, RAG_PROMPT
 
 logger = setup_logger("nodes")
 
-# LLM for query rewriting
+# LLM for query rewriting (use smaller/faster model)
 _rewrite_llm = None
+# Token encoder for fast local token counting
+_token_encoder = None
 
 
 def get_rewrite_llm() -> ChatOpenAI:
-    """Get LLM for query rewriting (singleton)."""
+    """Get LLM for query rewriting (singleton). Uses faster model."""
     global _rewrite_llm
     if _rewrite_llm is None:
-        _rewrite_llm = ChatOpenAI(model=settings.LLM_MODEL, temperature=0)
+        # Use gpt-4o-mini for rewriting - faster and cheaper
+        _rewrite_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     return _rewrite_llm
+
+
+def get_token_encoder():
+    """Get tiktoken encoder for fast token counting."""
+    global _token_encoder
+    if _token_encoder is None:
+        _token_encoder = tiktoken.encoding_for_model("gpt-4o")
+    return _token_encoder
+
+
+def count_tokens(messages) -> int:
+    """Count tokens in messages using tiktoken (fast, local)."""
+    encoder = get_token_encoder()
+    total = 0
+    for msg in messages:
+        # Approximate token count: content + role overhead
+        total += len(encoder.encode(msg.content)) + 4  # 4 tokens overhead per message
+    return total
 
 def rewrite_query_node(state: AgentState) -> dict:
     """Rewrite query using a token-aware trimmer."""
@@ -33,11 +55,11 @@ def rewrite_query_node(state: AgentState) -> dict:
 
     logger.debug(f"Rewriting query with {len(history)} history messages")
 
-    # 1. Define the trimmer (can be moved outside the function for performance)
+    # 1. Define the trimmer with fast local token counting
     trimmer = trim_messages(
         max_tokens=settings.REWRITE_MAX_TOKENS,
         strategy="last",           # Keep the most recent messages
-        token_counter=get_rewrite_llm(), # Use the LLM to count tokens accurately
+        token_counter=count_tokens, # Fast local token counting with tiktoken
         start_on="human",          # Ensure the snippet doesn't start with a random AI response
         include_system=True,       # Keep your instructions if they are in history
     )
@@ -92,11 +114,16 @@ def build_context_node(state: AgentState) -> dict:
 
 
 def generate_node(state: AgentState) -> dict:
-    """Generate answer using LLM."""
+    """Generate answer using LLM (streaming-compatible)."""
     query = state.get("rewritten_query") or state["query"]
-    answer = generate_answer(state["context"], query)
-    logger.info(f"Generated answer: {len(answer)} chars")
-    return {"answer": answer}
+
+    # Use streaming=True so astream_events can capture tokens
+    llm = get_llm(streaming=True)
+    chain = RAG_PROMPT | llm
+
+    response = chain.invoke({"context": state["context"], "question": query})
+    logger.info(f"Generated answer: {len(response.content)} chars")
+    return {"answer": response.content}
 
 
 def update_memory_node(state: AgentState) -> dict:

@@ -1,19 +1,58 @@
 # DocBot - RAG Application
 
-A Retrieval-Augmented Generation (RAG) application for querying PDF documents using OpenAI, Qdrant Cloud, and LangGraph.
+A Retrieval-Augmented Generation (RAG) application for querying PDF documents using OpenAI, Qdrant Cloud, and LangGraph. Includes a modern Next.js frontend with streaming responses.
 
 ## Features
 
-- PDF upload and parsing (with image and table extraction)
-- Document chunking with configurable size/overlap
-- Vector embeddings using OpenAI `text-embedding-3-small`
-- Cross-encoder reranking for improved retrieval accuracy
-- Conversation memory with Supabase PostgreSQL (or SQLite fallback)
-- Query rewriting for natural follow-up questions
-- Cloud vector storage with Qdrant
-- Redis caching for improved performance
-- RAG-based Q&A using GPT-4o-mini
-- FastAPI REST API
+- **Backend (FastAPI)**
+  - PDF upload and parsing (with image and table extraction)
+  - Document chunking with configurable size/overlap
+  - Vector embeddings using OpenAI `text-embedding-3-small`
+  - Cross-encoder reranking for improved retrieval accuracy
+  - Conversation memory with async LangGraph checkpointing
+  - Supabase PostgreSQL checkpointer with in-memory fallback for local/dev use
+  - Query rewriting for natural follow-up questions
+  - Cloud vector storage with Qdrant
+  - Redis caching (Upstash) for improved performance
+  - Streaming responses via Server-Sent Events (SSE)
+  - RAG-based Q&A using GPT-4o-mini
+
+- **Frontend (Next.js)**
+  - Modern chat interface with dark theme
+  - Real-time token-by-token streaming responses
+  - PDF upload support
+  - Conversation history sidebar
+  - Thread persistence across sessions
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              DOCBOT ARCHITECTURE                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌─────────────────┐         ┌─────────────────────────────────────────┐   │
+│   │   Next.js       │         │            FastAPI Backend              │   │
+│   │   Frontend      │  HTTP   │                                         │   │
+│   │   (Vercel)      │ ──────► │  ┌─────────┐    ┌─────────────────┐     │   │
+│   │                 │         │  │ /query  │    │ LangGraph       │     │   │
+│   │  - Chat UI      │◄─────── │  │ /query/ │───►│ Pipeline        │     │   │
+│   │  - Streaming UI │   SSE   │  │ stream  │    │                 │     │   │
+│   │  - PDF Upload   │   SSE   │  │ /upload │    │                 │     │   │
+│   │  - Thread List  │         │  └─────────┘    └────────┬────────┘     │   │
+│   └─────────────────┘         │                          │              │   │
+│                               │                          ▼              │   │
+│                               │  ┌──────────────────────────────────┐   │   │
+│                               │  │           External Services      │   │   │
+│                               │  │  ┌────────┐ ┌────────┐ ┌───────┐ │   │   │
+│                               │  │  │Qdrant  │ │Supabase│ │Upstash│ │   │   │
+│                               │  │  │Cloud   │ │Postgres│ │Redis  │ │   │   │
+│                               │  │  └────────┘ └────────┘ └───────┘ │   │   │
+│                               │  └──────────────────────────────────┘   │   │
+│                               └─────────────────────────────────────────┘   │
+│                                         (Render)                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ## LangGraph RAG Pipeline
 
@@ -41,14 +80,14 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 │   └────────┬────────┘                                               │
 │            ↓                                                        │
 │   ┌─────────────────┐                                               │
-│   │   Generation    │  → LLM generates answer from context          │
+│   │   Generation    │  → LLM generates answer (streaming)           │
 │   └────────┬────────┘                                               │
 │            ↓                                                        │
 │   ┌─────────────────┐                                               │
-│   │ Update Memory   │  → Save Q&A to chat history (Supabase/SQLite)  │
+│   │ Update Memory   │  → Save Q&A to checkpointed chat history      │
 │   └────────┬────────┘                                               │
 │            ↓                                                        │
-│       Response                                                      │
+│       Response (streamed)                                           │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -57,11 +96,13 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 
 ```
 DocBot/
-├── app/                        # Main application
+├── app/                        # FastAPI Backend
 │   ├── api/
-│   │   └── routes.py           # FastAPI endpoints
+│   │   └── routes.py           # API endpoints (query, stream, upload, history)
 │   ├── core/
-│   │   └── config.py           # Centralized settings
+│   │   ├── config.py           # Centralized settings
+│   │   ├── cache.py            # Redis caching (Upstash)
+│   │   └── logger.py           # Logging configuration
 │   ├── db/
 │   │   └── vector_db.py        # Qdrant Cloud client
 │   ├── models/
@@ -70,13 +111,22 @@ DocBot/
 │   ├── services/
 │   │   ├── state.py            # LangGraph AgentState
 │   │   ├── nodes.py            # LangGraph node functions
-│   │   ├── graph.py            # LangGraph builder
-│   │   ├── rag_service.py      # Main RAG entry point
+│   │   ├── graph.py            # LangGraph builder + checkpointer lifecycle
+│   │   ├── rag_service.py      # Async RAG entry point + SSE streaming
 │   │   ├── embedding.py        # Embedding logic
 │   │   ├── generation.py       # LLM calls
 │   │   ├── reranker.py         # Cross-encoder reranking
 │   │   └── retrieval.py        # Vector search
-│   └── main.py                 # FastAPI entrypoint
+│   └── main.py                 # FastAPI entrypoint with CORS
+│
+├── frontend/                   # Next.js Frontend
+│   ├── src/app/
+│   │   ├── page.tsx            # Main chat interface
+│   │   ├── layout.tsx          # App layout
+│   │   └── globals.css         # Tailwind styles
+│   ├── package.json
+│   ├── tailwind.config.js
+│   └── .env.local              # Frontend environment variables
 │
 ├── ingestion/                  # Data ingestion pipeline
 │   ├── loader.py               # PDF loading with PyMuPDF
@@ -85,75 +135,86 @@ DocBot/
 │   └── indexer.py              # Full indexing pipeline
 │
 ├── tests/                      # Unit tests
-├── workers/                    # Background jobs (future)
-├── checkpoints.db              # SQLite fallback (when Supabase not configured)
+├── render.yaml                 # Render deployment config
 ├── requirements.txt
 ├── .env
 └── README.md
 ```
 
-## Setup
+## Quick Start
 
 ### 1. Clone and install dependencies
 
 ```bash
 git clone https://github.com/yourusername/DocBot.git
 cd DocBot
+
+# Backend
 pip install -r requirements.txt
+
+# Frontend
+cd frontend
+npm install
+cd ..
 ```
 
 ### 2. Configure environment
 
-Create a `.env` file:
+Create a `.env` file in the root directory:
 
 ```env
+# OpenAI
 OPENAI_API_KEY=your_openai_api_key
+HF_TOKEN=your_huggingface_token
 
 # Logging
-LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
+LOG_LEVEL=INFO
 
 # LLM Settings
 LLM_MODEL=gpt-4o-mini
 LLM_TEMPERATURE=0.6
 LLM_MAX_TOKENS=500
 
-# Embedding Settings
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIMENSIONS=1536
-
 # Qdrant Cloud
 QDRANT_URL=https://your-cluster.cloud.qdrant.io:6333
 QDRANT_API_KEY=your_qdrant_api_key
 QDRANT_COLLECTION_NAME=RAG-app
 
-# Supabase PostgreSQL (for chat history)
-# Use the Connection Pooler URL (not direct connection) to avoid IPv6 issues
+# Supabase PostgreSQL (for LangGraph checkpointer)
 SUPABASE_DB_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres
 
-# Retrieval & Reranking
-RERANKER_INITIAL_K=10    # Docs to fetch before reranking
-RETRIEVER_K=5            # Final docs after reranking
-
-# Chunking
-CHUNK_SIZE=500
-CHUNK_OVERLAP=100
-
-# Redis Cache
-REDIS_URL=redis://localhost:6379/0
+# Upstash Redis (note: rediss:// for TLS)
+REDIS_URL=rediss://default:your_password@your_endpoint.upstash.io:6379
 CACHE_ENABLED=true
-CACHE_TTL_RESPONSE=3600      # 1 hour
-CACHE_TTL_RETRIEVAL=3600     # 1 hour
-CACHE_TTL_RERANKER=3600      # 1 hour
+
+# LangSmith (optional)
+LANGCHAIN_API_KEY=your_langsmith_api_key
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_PROJECT=doc-bot-project
 ```
 
-### 3. Run the application
+Create `frontend/.env.local`:
 
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8001
+```
+
+### 3. Run locally
+
+**Terminal 1 - Backend:**
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8001
 ```
 
-API available at: `http://localhost:8000`
-Swagger docs at: `http://localhost:8000/docs`
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm run dev
+```
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8001
+- API Docs: http://localhost:8001/docs
 
 ## API Endpoints
 
@@ -161,133 +222,105 @@ Swagger docs at: `http://localhost:8000/docs`
 |--------|----------|-------------|
 | GET | `/health` | Health check |
 | POST | `/ingest/upload` | Upload and index a PDF |
-| POST | `/embed` | Embed raw chunks |
+| POST | `/query` | Query documents (non-streaming) |
+| POST | `/query/stream` | Query documents (streaming SSE) |
+| GET | `/threads/{thread_id}/history` | Get conversation history |
 | GET | `/embed/count` | Get total chunk count |
-| POST | `/query` | Query documents with conversation memory |
 | GET | `/cache/stats` | Get cache statistics |
 | POST | `/cache/clear` | Clear all caches |
 
-### Example: Upload PDF
+### Example: Query with Streaming
 
 ```bash
-curl -X POST "http://localhost:8000/ingest/upload" \
-  -F "file=@document.pdf"
-```
-
-### Example: Query with Conversation Memory
-
-```bash
-# First question
-curl -X POST "http://localhost:8000/query" \
+curl -X POST "http://localhost:8001/query/stream" \
   -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
   -d '{"question": "What is the transformer architecture?", "thread_id": "user-123"}'
-
-# Follow-up question (same thread_id)
-curl -X POST "http://localhost:8000/query" \
-  -H "Content-Type: application/json" \
-  -d '{"question": "How does it use attention?", "thread_id": "user-123"}'
 ```
 
-The follow-up query automatically rewrites "it" to "the Transformer" using conversation history.
+Response (Server-Sent Events):
+```
+event: metadata
+data: {"sources": 5}
 
-### Example Response
+event: token
+data: {"token": "The"}
 
+event: token
+data: {"token": " Transformer"}
+
+event: token
+data: {"token": " is"}
+
+... (more tokens)
+
+event: done
+data: {"status": "complete"}
+```
+
+Possible error event:
+```text
+event: error
+data: {"message": "Stream query failed"}
+```
+
+### Example: Get Thread History
+
+```bash
+curl "http://localhost:8001/threads/user-123/history"
+```
+
+Response:
 ```json
 {
-  "answer": "The Transformer is a model architecture that relies entirely on self-attention mechanisms...",
-  "sources": 5
+  "messages": [
+    {"role": "user", "content": "What is attention?"},
+    {"role": "assistant", "content": "Attention is a mechanism..."}
+  ]
 }
 ```
 
+## Deployment
+
+### Backend → Render
+
+1. Push code to GitHub
+2. Go to [render.com](https://render.com) → New → Web Service
+3. Connect your GitHub repo
+4. Settings:
+   - **Runtime:** Python
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+5. Add environment variables from your `.env`
+6. Deploy
+
+### Frontend → Vercel
+
+1. Go to [vercel.com](https://vercel.com) → New Project
+2. Import your GitHub repo
+3. Set **Root Directory:** `frontend`
+4. Add environment variable:
+   ```
+   NEXT_PUBLIC_API_URL=https://your-docbot-api.onrender.com
+   ```
+5. Deploy
+
 ## Conversation Memory
 
-DocBot uses LangGraph with Supabase PostgreSQL for conversation memory (falls back to SQLite if not configured):
+DocBot uses LangGraph checkpointing for conversation memory:
 
 - **Same `thread_id`** = Same conversation (history shared)
 - **Different `thread_id`** = New conversation (fresh start)
-- **Persistence** = Conversations survive server restarts
+- **Frontend-generated thread IDs** = New chats automatically get a unique thread id
+- **Persistence** = Conversations survive server restarts when `SUPABASE_DB_URL` is configured
+- **Fallback behavior** = Without Supabase configured, history uses in-memory checkpoints only
+- **Cache-aware** = Cached responses still save to chat history
 
-| thread_id | Query | Behavior |
-|-----------|-------|----------|
-| `user-123` | "What is attention?" | New conversation |
-| `user-123` | "How does it work?" | Uses previous context, rewrites query |
-| `user-456` | "What is attention?" | Separate conversation |
-
-## Observability (LangSmith)
-
-DocBot integrates with LangSmith for full pipeline tracing.
-
-### Setup
-
-Add to your `.env`:
-
-```env
-LANGCHAIN_API_KEY=your_langsmith_api_key
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_PROJECT=doc-bot-project
-```
-
-### What Gets Traced
-
-| Component | Traced Data |
-|-----------|-------------|
-| Graph Execution | Full LangGraph run with all nodes |
-| Query Rewrite | Input/output of rewrite node |
-| Retrieval | Qdrant similarity search |
-| Reranker | Cross-encoder scoring |
-| Generation | LLM prompts, responses, tokens, latency |
-| Memory | Chat history updates |
-
-View traces at: [smith.langchain.com](https://smith.langchain.com)
-
-## Logging
-
-DocBot includes a centralized logging module for debugging and monitoring.
-
-### Configuration
-
-Set the log level in `.env`:
-
-```env
-LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
-```
-
-### Log Output
-
-```
-2024-01-15 10:23:45 | INFO  | routes       | Query received: "What is attention?" thread_id=user-123
-2024-01-15 10:23:45 | DEBUG | nodes        | Rewriting query with 4 history messages
-2024-01-15 10:23:46 | INFO  | retrieval    | Similarity search: 10 docs in 234ms
-2024-01-15 10:23:46 | INFO  | reranker     | Reranked 10 -> 5 docs in 89ms
-2024-01-15 10:23:48 | INFO  | generation   | LLM response: 156 chars in 1.8s
-2024-01-15 10:23:48 | INFO  | routes       | Query complete: 5 sources in 2.3s
-```
-
-### Logged Components
-
-| Module | What's Logged |
-|--------|---------------|
-| `routes` | Request/response, timing |
-| `nodes` | Pipeline stage execution |
-| `retrieval` | Document search timing |
-| `reranker` | Reranking scores and timing |
-| `generation` | LLM response timing |
-| `graph` | Checkpointer initialization |
-| `vector_db` | Qdrant connection status |
+The backend query path and history path both use LangGraph's async checkpoint APIs, which is required when running with the async Postgres saver.
 
 ## Caching
 
-DocBot uses Redis for multi-layer caching to improve performance.
-
-### Setup
-
-Start Redis with Docker:
-
-```bash
-docker run -d --name docbot-redis -p 6379:6379 redis
-```
-
-### Cache Layers
+DocBot uses Upstash Redis (serverless) for multi-layer caching:
 
 | Layer | Cache Key | TTL | Description |
 |-------|-----------|-----|-------------|
@@ -295,50 +328,37 @@ docker run -d --name docbot-redis -p 6379:6379 redis
 | Retrieval | `retrieve:{query_hash}` | 1 hour | Document search results |
 | Reranker | `rerank:{query+docs_hash}` | 1 hour | Reranked document order |
 
-### Cache Invalidation
-
-- **Automatic**: Caches are invalidated when new PDFs are ingested
-- **Manual**: Use `POST /cache/clear` to clear all caches
-
-### Performance Gains
-
-| Scenario | Without Cache | With Cache |
-|----------|---------------|------------|
-| Repeated query | ~3-4 seconds | ~50ms |
-| Same docs reranked | ~3-4 seconds | ~2.5 seconds |
-
-### Configuration
-
-```env
-REDIS_URL=redis://localhost:6379/0
-CACHE_ENABLED=true              # Set to false to disable caching
-CACHE_TTL_RESPONSE=3600         # 1 hour
-CACHE_TTL_RETRIEVAL=3600        # 1 hour
-CACHE_TTL_RERANKER=3600         # 1 hour
-```
-
-## TODO / Roadmap
-
-- [ ] **Duplicate detection**: Add content-based hashing to prevent duplicate chunks
-- [x] Add Redis caching for frequent queries
-- [ ] Add S3/blob storage for PDFs
-- [ ] Background workers for async ingestion
-- [ ] Dockerfile and docker-compose setup
-- [x] Add logging module
-- [ ] Add more comprehensive tests
-- [ ] Support for other document types (DOCX, TXT)
-- [ ] Add evaluation metrics (RAGAS)
-- [ ] Conditional routing in LangGraph (e.g., skip rerank for simple queries)
+**Note:** Cached responses now properly save Q&A to conversation history.
 
 ## Tech Stack
 
-- **Framework**: FastAPI
-- **Orchestration**: LangGraph (stateful workflows)
-- **LLM**: OpenAI GPT-4o-mini
-- **Embeddings**: OpenAI text-embedding-3-small
-- **Reranker**: Cross-encoder (ms-marco-MiniLM-L6-v2)
-- **Vector Store**: Qdrant Cloud
-- **Memory**: Supabase PostgreSQL (via LangGraph checkpointer, SQLite fallback)
-- **Cache**: Redis
-- **PDF Parsing**: PyMuPDF4LLM
-- **Observability**: LangSmith
+| Component | Technology |
+|-----------|------------|
+| **Backend Framework** | FastAPI |
+| **Frontend Framework** | Next.js 14 + React |
+| **Styling** | Tailwind CSS |
+| **Orchestration** | LangGraph |
+| **LLM** | OpenAI GPT-4o-mini |
+| **Embeddings** | OpenAI text-embedding-3-small |
+| **Reranker** | Cross-encoder (ms-marco-MiniLM-L6-v2) |
+| **Vector Store** | Qdrant Cloud |
+| **Database** | Supabase PostgreSQL |
+| **Cache** | Upstash Redis |
+| **PDF Parsing** | PyMuPDF4LLM |
+| **Observability** | LangSmith |
+| **Backend Hosting** | Render |
+| **Frontend Hosting** | Vercel |
+
+## TODO / Roadmap
+
+- [x] Redis caching for frequent queries
+- [x] Streaming responses (SSE)
+- [x] Next.js frontend with chat UI
+- [x] Conversation history in frontend
+- [x] Upstash Redis (serverless)
+- [ ] Duplicate detection (content-based hashing)
+- [ ] S3/blob storage for PDFs
+- [ ] Background workers for async ingestion
+- [ ] Dockerfile and docker-compose setup
+- [ ] Support for other document types (DOCX, TXT)
+- [ ] RAGAS evaluation metrics

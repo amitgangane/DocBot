@@ -1,0 +1,8 @@
+{
+  "graphs": {
+    "rag_agent": "./app/services/graph.py:get_rag_graph"
+  },
+  "env": ".env",
+  "python_version": "3.12",
+  "dependencies": ["./requirements.txt"]
+}

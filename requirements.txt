@@ -41,3 +41,6 @@ sentence_transformers
 # LangSmith
 langsmith
 langgraph-cli[inmem]
+
+aiosqlite
+psycopg_pool
