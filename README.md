@@ -6,10 +6,10 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 
 - **Backend (FastAPI)**
   - PDF upload and parsing (with image and table extraction)
-  - Document chunking with configurable size/overlap
+  - Document chunking with configurable size/overlap and low-signal chunk filtering
   - Vector embeddings using OpenAI `text-embedding-3-small`
   - Stable document metadata (`document_id`, `filename`, `source_path`, `chunk_id`) on ingestion
-  - Cross-encoder reranking for improved retrieval accuracy
+  - Cross-encoder reranking for improved retrieval accuracy (`top 20` retrieved → `top 5` reranked)
   - Conversation memory with async LangGraph checkpointing
   - Supabase PostgreSQL checkpointer with in-memory fallback for local/dev use
   - Query rewriting for natural follow-up questions
@@ -18,6 +18,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
   - Streaming responses via Server-Sent Events (SSE)
   - Document listing and per-document deletion from Qdrant
   - RAG-based Q&A using GPT-4o-mini
+  - Retrieval evaluation suite for context precision, context recall, faithfulness, and answer relevancy
 
 - **Frontend (Next.js)**
   - Clean light-theme chat interface with a fixed left sidebar
@@ -73,7 +74,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 │   └────────┬────────┘    "How does it work?" → "How does the        │
 │            ↓              Transformer work?"                        │
 │   ┌─────────────────┐                                               │
-│   │   Retrieval     │  → Fetch top 10 docs (embedding search)       │
+│   │   Retrieval     │  → Fetch top 20 docs (embedding search)       │
 │   └────────┬────────┘                                               │
 │            ↓                                                        │
 │   ┌─────────────────┐                                               │
@@ -377,7 +378,7 @@ This metadata powers two user-facing features:
 - the `Documents` section in the frontend PDF manager
 - source chips and expandable source details under assistant answers
 
-If you reset or rebuild the Qdrant collection, re-upload your PDFs so every chunk has the latest metadata schema.
+During ingestion, the app now filters out low-signal chunks such as reference-heavy citation blobs, generic figure summaries, and low-value caption artifacts while preserving useful body text and tables. If you reset or rebuild the Qdrant collection, re-upload your PDFs so every chunk uses the latest filtering and metadata schema.
 
 ## Frontend Notes
 
@@ -399,6 +400,25 @@ DocBot uses Upstash Redis (serverless) for multi-layer caching:
 | Reranker | `rerank:{query+docs_hash}` | 1 hour | Reranked document order |
 
 **Note:** Cached responses now properly save Q&A to conversation history.
+
+## Evaluation
+
+DocBot includes a lightweight metric-based retrieval and answer evaluation suite in [test_rag.py](/Users/amit/Desktop/DocuBot/DocBot/tests/test_rag.py).
+
+Current checks:
+
+- `ContextPrecision` to measure whether the top reranked chunks are relevant to the question/reference pair
+- `ContextRecall` to measure whether the retrieved chunks collectively cover the reference answer
+- `Faithfulness` to measure whether the app's generated answer is grounded in the retrieved contexts
+- `AnswerRelevancy` to measure whether the generated answer directly addresses the user question
+
+Run the suite with:
+
+```bash
+pytest tests/test_rag.py -q
+```
+
+The current evaluation set is defined directly in `TESTSET` inside `tests/test_rag.py`.
 
 ## Tech Stack
 
@@ -442,7 +462,7 @@ DocBot uses Upstash Redis (serverless) for multi-layer caching:
 
 ### Evaluation And Quality
 
-- [ ] Add retrieval and answer-quality evaluation, for example RAGAS or a smaller custom benchmark.
+- [ ] Expand the current `TESTSET` with more document-specific and failure-mode questions.
 - [ ] Add regression tests for UI states like source chips, thinking status panels, and document deletion.
 
 ## Completed
@@ -456,6 +476,7 @@ DocBot uses Upstash Redis (serverless) for multi-layer caching:
 - [x] Per-document listing and deletion in Qdrant
 - [x] Source persistence for newer thread history entries
 - [x] LangSmith tracing across the RAG pipeline
+- [x] Metric-based retrieval and answer evaluation suite (`ContextPrecision`, `ContextRecall`, `Faithfulness`, `AnswerRelevancy`)
 
 ## Demo
 

@@ -5,6 +5,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.sqlite3
+.idea/
 .env
 .env.*
 !.env.example
@@ -21,3 +22,5 @@ checkpoints.db-wal
 .langgraph/
 .coverage
 htmlcov/
+evals/results/
+tests/context_data.json

@@ -125,34 +125,35 @@ def list_indexed_documents() -> list[dict]:
 def delete_indexed_document(document_id: str) -> int:
     """Delete all chunks belonging to a document and return deleted count."""
     client = get_qdrant_client()
-    count_response = client.count(
-        collection_name=settings.QDRANT_COLLECTION_NAME,
-        count_filter=models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="metadata.document_id",
-                    match=models.MatchValue(value=document_id),
-                )
-            ]
-        ),
-        exact=True,
-    )
+    next_offset = None
+    point_ids: list[models.ExtendedPointId] = []
 
-    chunks_deleted = count_response.count
-    if chunks_deleted == 0:
+    while True:
+        points, next_offset = client.scroll(
+            collection_name=settings.QDRANT_COLLECTION_NAME,
+            scroll_filter=None,
+            limit=256,
+            offset=next_offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        for point in points:
+            payload = point.payload or {}
+            metadata = payload.get("metadata") or {}
+            point_document_id = metadata.get("document_id") or payload.get("document_id")
+            if point_document_id == document_id:
+                point_ids.append(point.id)
+
+        if next_offset is None:
+            break
+
+    if not point_ids:
         return 0
 
     client.delete(
         collection_name=settings.QDRANT_COLLECTION_NAME,
-        points_selector=models.FilterSelector(
-            filter=models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="metadata.document_id",
-                        match=models.MatchValue(value=document_id),
-                    )
-                ]
-            )
-        ),
+        points_selector=models.PointIdsList(points=point_ids),
+        wait=True,
     )
-    return chunks_deleted
+    return len(point_ids)

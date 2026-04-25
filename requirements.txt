@@ -14,6 +14,7 @@ langchain-core
 langchain-chroma
 langchain-text-splitters
 langchain_pymupdf4llm
+pdfplumber
 
 # LangGraph
 langgraph
@@ -30,6 +31,8 @@ redis
 
 # Testing & Evaluation
 pytest
+pytest-asyncio
+anyio
 ragas
 datasets
 

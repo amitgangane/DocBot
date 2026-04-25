@@ -27,7 +27,7 @@ class Settings:
     RETRIEVER_K: int = int(os.getenv("RETRIEVER_K", "5"))
 
     # Reranker
-    RERANKER_INITIAL_K: int = int(os.getenv("RERANKER_INITIAL_K", "10"))
+    RERANKER_INITIAL_K: int = int(os.getenv("RERANKER_INITIAL_K", "20"))
 
     # Query Rewriting
     REWRITE_MAX_TOKENS: int = int(os.getenv("REWRITE_MAX_TOKENS", "1000"))
