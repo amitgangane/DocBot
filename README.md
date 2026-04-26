@@ -33,34 +33,65 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    U["User"]
+
+    subgraph FE["Frontend Layer"]
+        V["Vercel / Docker Frontend Container"]
+        N["Next.js App"]
+        UI["Chat UI<br/>Thread Sidebar<br/>Upload Manager<br/>Source Drawer"]
+    end
+
+    subgraph BE["Backend Layer"]
+        R["Render / Docker Backend Container"]
+        F["FastAPI App"]
+        API["REST + SSE Endpoints"]
+        RG["RAG Service"]
+        LG["LangGraph Pipeline"]
+    end
+
+    subgraph DS["Data + Infra Layer"]
+        Q["Qdrant Cloud<br/>Vector Store"]
+        S["Supabase Storage<br/>PDF Files"]
+        P["Supabase Postgres<br/>LangGraph Checkpointer"]
+        C["Upstash Redis<br/>Caching"]
+        O["OpenAI APIs<br/>LLM + Embeddings"]
+        L["LangSmith<br/>Tracing / Observability"]
+    end
+
+    U --> V
+    V --> N
+    N --> UI
+    UI --> API
+    API --> RG
+    RG --> LG
+
+    LG --> Q
+    LG --> P
+    LG --> O
+    RG --> C
+    API --> S
+    RG --> L
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              DOCBOT ARCHITECTURE                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   ┌─────────────────┐         ┌─────────────────────────────────────────┐   │
-│   │   Next.js       │         │            FastAPI Backend              │   │
-│   │   Frontend      │  HTTP   │                                         │   │
-│   │   (Vercel)      │ ──────► │  ┌─────────┐    ┌─────────────────┐     │   │
-│   │                 │         │  │ /query  │    │ LangGraph       │     │   │
-│   │  - Chat UI      │◄─────── │  │ /query/ │───►│ Pipeline        │     │   │
-│   │  - Streaming UI │   SSE   │  │ stream  │    │                 │     │   │
-│   │  - PDF Manager  │         │  │ /ingest │    │                 │     │   │
-│   │  - Thread List  │         │  │ /documents     │                │     │   │
-│   │  - Source Chips │         │  └─────────┘    └────────┬────────┘     │   │
-│   └─────────────────┘         │                          │              │   │
-│                               │                          ▼              │   │
-│                               │  ┌──────────────────────────────────┐   │   │
-│                               │  │           External Services      │   │   │
-│                               │  │  ┌────────┐ ┌────────┐ ┌───────┐ │   │   │
-│                               │  │  │Qdrant  │ │Supabase│ │Upstash│ │   │   │
-│                               │  │  │Cloud   │ │Postgres│ │Redis  │ │   │   │
-│                               │  │  └────────┘ └────────┘ └───────┘ │   │   │
-│                               │  └──────────────────────────────────┘   │   │
-│                               └─────────────────────────────────────────┘   │
-│                                         (Render)                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+
+### High-Level Placement
+
+- **Frontend layer**
+  - deployed on **Vercel** or run locally in a **Docker frontend container**
+  - contains the **Next.js app** and the user-facing chat experience
+- **Backend layer**
+  - deployed on **Render** or run locally in a **Docker backend container**
+  - contains **FastAPI**, API routes, the **RAG service**, and the **LangGraph pipeline**
+- **Data and infrastructure layer**
+  - **Qdrant Cloud** stores embeddings and chunk metadata
+  - **Supabase Storage** stores uploaded PDFs
+  - **Supabase Postgres** stores LangGraph conversation memory
+  - **Upstash Redis** stores retrieval, rerank, and response caches
+  - **OpenAI** provides embeddings, query rewriting, and answer generation
+  - **LangSmith** provides tracing and observability
+
+For the full architecture, request flows, storage design, and component placement, see [SYSTEM_DESIGN.md](/Users/amit/Desktop/DocuBot/DocBot/SYSTEM_DESIGN.md).
 
 ## LangGraph RAG Pipeline
 
