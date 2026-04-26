@@ -1,5 +1,6 @@
 import time
-from sentence_transformers import CrossEncoder
+from typing import Any
+
 from langchain_core.documents import Document
 
 from app.core.config import settings
@@ -9,7 +10,7 @@ from app.core.cache import cache_get, cache_set, make_cache_key
 logger = setup_logger("reranker")
 
 # Initialize cross-encoder model (loads once)
-_reranker = None
+_reranker: Any = None
 
 
 def _infer_query_intent(query: str) -> str:
@@ -44,10 +45,12 @@ def _metadata_bonus(query: str, doc: Document) -> float:
     return bonus
 
 
-def get_reranker() -> CrossEncoder:
+def get_reranker():
     """Get or create the cross-encoder reranker singleton."""
     global _reranker
     if _reranker is None:
+        from sentence_transformers import CrossEncoder
+
         logger.info("Loading cross-encoder model...")
         _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L6-v2")
         logger.info("Cross-encoder model loaded")
