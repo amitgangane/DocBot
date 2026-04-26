@@ -450,29 +450,10 @@ The current evaluation set is defined directly in `TESTSET` inside `tests/test_r
 
 ## TODO
 
-### Highest Priority
-
-- [ ] Add backend and frontend tests for thread history, source persistence, and document deletion.
-- [ ] Improve thread-history reliability by surfacing backend health/status in the UI instead of only timing out.
-- [ ] Add a document-details endpoint or cached metadata store so the upload manager does not need to infer everything from vector payloads.
-
-### Product Improvements
-
-- [ ] Add duplicate-document detection using content hashing before ingestion.
-- [ ] Add drag-and-drop PDF upload and clearer upload progress states.
-- [ ] Add source preview actions such as copy excerpt or jump to page metadata.
-- [ ] Add thread rename and search in the sidebar.
-
-### Infrastructure
-
-- [ ] Add Dockerfile and docker-compose setup for local full-stack development.
-- [ ] Add durable blob storage for uploaded PDFs instead of relying only on the local upload directory.
-- [ ] Add optional background ingestion workers for larger PDFs or multi-user workloads.
-
-### Evaluation And Quality
-
-- [ ] Expand the current `TESTSET` with more document-specific and failure-mode questions.
-- [ ] Add regression tests for UI states like source chips, thinking status panels, and document deletion.
+- [ ] Add more questions and edge cases to the current `TESTSET`.
+- [ ] Improve metadata-aware retrieval and reranking.
+- [ ] Add a few more frontend polish items like source actions and thread rename/search.
+- [ ] Add broader regression coverage for thread history, document deletion, and key UI states.
 
 ## Completed
 
