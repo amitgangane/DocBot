@@ -25,3 +25,4 @@ htmlcov/
 evals/results/
 tests/context_data.json
 LINKEDIN_POST.md
+BACKEND_CHANGES.md
