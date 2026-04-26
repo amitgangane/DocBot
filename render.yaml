@@ -10,19 +10,37 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.12.0
+        value: 3.12.12
       - key: OPENAI_API_KEY
         sync: false  # Set manually in Render dashboard
+      - key: LLM_MODEL
+        value: gpt-4o-mini
+      - key: EMBEDDING_MODEL
+        value: text-embedding-3-small
       - key: QDRANT_URL
         sync: false
       - key: QDRANT_API_KEY
         sync: false
+      - key: QDRANT_COLLECTION_NAME
+        value: RAG-app
       - key: SUPABASE_DB_URL
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: documents
       - key: REDIS_URL
         sync: false
       - key: CACHE_ENABLED
         value: "true"
       - key: LOG_LEVEL
         value: INFO
+      - key: LANGCHAIN_API_KEY
+        sync: false
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_PROJECT
+        value: docbot-production
     healthCheckPath: /health
