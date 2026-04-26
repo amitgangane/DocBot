@@ -24,3 +24,4 @@ checkpoints.db-wal
 htmlcov/
 evals/results/
 tests/context_data.json
+LINKEDIN_POST.md

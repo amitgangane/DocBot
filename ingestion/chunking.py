@@ -140,6 +140,31 @@ def _low_signal_hits(text: str) -> int:
     return sum(1 for pattern in LOW_SIGNAL_PATTERNS if pattern.search(text))
 
 
+def _infer_content_type(text: str) -> str:
+    normalized = _normalize_text(text)
+    lower = normalized.lower()
+
+    if _looks_like_table(text):
+        return "table"
+    if _looks_like_reference_chunk(text) or _is_reference_heavy(text):
+        return "references"
+    if lower.startswith(("fig.", "figure ")):
+        return "figure_caption"
+    if lower.startswith(("summary:", "### summary", "![", "image summary")):
+        return "image_summary"
+    return "body"
+
+
+def _annotate_chunk_metadata(chunks: list) -> list:
+    for chunk in chunks:
+        text = chunk.page_content or ""
+        metadata = dict(getattr(chunk, "metadata", {}) or {})
+        metadata["content_type"] = _infer_content_type(text)
+        metadata["is_reference_heavy"] = _is_reference_heavy(text)
+        chunk.metadata = metadata
+    return chunks
+
+
 def _should_keep_chunk(text: str) -> bool:
     normalized = _normalize_text(text)
     if len(normalized) < 80:
@@ -197,7 +222,7 @@ def chunk_documents(docs: list) -> list:
         chunk_overlap=settings.CHUNK_OVERLAP,
     )
 
-    chunks = char_splitter.split_documents(docs)
+    chunks = _annotate_chunk_metadata(char_splitter.split_documents(docs))
     filtered_chunks = _filter_chunks(chunks)
     print(f"Total chunks: {len(chunks)} -> {len(filtered_chunks)} after filtering")
     return filtered_chunks

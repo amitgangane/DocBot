@@ -100,6 +100,7 @@ def list_indexed_documents() -> list[dict]:
                     "document_id": document_id,
                     "filename": metadata.get("filename") or payload.get("filename") or "Untitled document",
                     "source_path": metadata.get("source_path") or payload.get("source_path") or "",
+                    "storage_path": metadata.get("storage_path") or payload.get("storage_path") or "",
                     "chunk_count": 0,
                     "page_count": 0,
                 }

@@ -39,6 +39,9 @@ class Settings:
 
     # Supabase PostgreSQL (for LangGraph checkpointer)
     SUPABASE_DB_URL: str = os.getenv("SUPABASE_DB_URL", "")
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "documents")
 
     # Redis Cache
     REDIS_URL: str = os.getenv("REDIS_URL", "")

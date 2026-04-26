@@ -6,6 +6,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
 
 - **Backend (FastAPI)**
   - PDF upload and parsing (with image and table extraction)
+  - Persistent PDF storage in Supabase Storage, with local fallback for development
   - Document chunking with configurable size/overlap and low-signal chunk filtering
   - Vector embeddings using OpenAI `text-embedding-3-small`
   - Stable document metadata (`document_id`, `filename`, `source_path`, `chunk_id`) on ingestion
@@ -119,6 +120,7 @@ DocBot/
 │   │   ├── nodes.py            # LangGraph node functions
 │   │   ├── graph.py            # LangGraph builder + checkpointer lifecycle
 │   │   ├── rag_service.py      # Async RAG entry point + SSE streaming
+│   │   ├── document_storage.py # Supabase Storage upload/delete helpers
 │   │   ├── embedding.py        # Embedding logic
 │   │   ├── generation.py       # LLM calls
 │   │   ├── reranker.py         # Cross-encoder reranking
@@ -188,6 +190,11 @@ QDRANT_COLLECTION_NAME=RAG-app
 
 # Supabase PostgreSQL (for LangGraph checkpointer)
 SUPABASE_DB_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres
+
+# Supabase Storage (for uploaded PDFs)
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+SUPABASE_STORAGE_BUCKET=documents
 
 # Upstash Redis (note: rediss:// for TLS)
 REDIS_URL=rediss://default:your_password@your_endpoint.upstash.io:6379
@@ -372,6 +379,8 @@ Each uploaded PDF is stored in Qdrant as chunked embeddings with stable metadata
 - `filename` and `source_path` are used for document listing and source display
 - `page_number` is used to show page references in answers
 - `chunk_id` and `chunk_index` help with traceability and deletion
+
+When Supabase Storage is configured, uploaded PDFs are persisted in the configured bucket and `source_path` stores the storage object path. The backend still uses a temporary local file only during parsing because the current PDF loader expects a filesystem path. Without storage credentials, the app falls back to local file storage for development.
 
 This metadata powers two user-facing features:
 

@@ -12,6 +12,38 @@ logger = setup_logger("reranker")
 _reranker = None
 
 
+def _infer_query_intent(query: str) -> str:
+    lowered = query.lower()
+    if any(term in lowered for term in ["table", "compare", "comparison", "accuracy", "result", "score", "benchmark"]):
+        return "table"
+    if any(term in lowered for term in ["figure", "fig.", "diagram", "image", "caption"]):
+        return "figure"
+    return "body"
+
+
+def _metadata_bonus(query: str, doc: Document) -> float:
+    metadata = doc.metadata or {}
+    content_type = metadata.get("content_type", "body")
+    is_reference_heavy = bool(metadata.get("is_reference_heavy"))
+    intent = _infer_query_intent(query)
+
+    bonus = 0.0
+
+    if is_reference_heavy or content_type == "references":
+        return -0.75
+
+    if content_type == "image_summary":
+        bonus -= 0.2
+    elif content_type == "figure_caption":
+        bonus += 0.12 if intent == "figure" else -0.1
+    elif content_type == "table":
+        bonus += 0.18 if intent == "table" else -0.03
+    elif content_type == "body":
+        bonus += 0.12 if intent == "body" else 0.03
+
+    return bonus
+
+
 def get_reranker() -> CrossEncoder:
     """Get or create the cross-encoder reranker singleton."""
     global _reranker
@@ -83,15 +115,34 @@ def rerank_documents(
     # Get relevance scores
     scores = reranker.predict(pairs)
 
-    # Sort by score (descending) and return top_k documents
-    ranked = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
-    result_docs = [doc for doc, _ in ranked[:top_k]]
+    # Blend semantic reranker scores with lightweight metadata preferences.
+    ranked = sorted(
+        (
+            (doc, float(score), float(score) + _metadata_bonus(query, doc))
+            for doc, score in zip(documents, scores)
+        ),
+        key=lambda item: item[2],
+        reverse=True,
+    )
+    result_docs = [doc for doc, _, _ in ranked[:top_k]]
 
     # Cache the results
     cache_set(cache_key, _docs_to_cache(result_docs), settings.CACHE_TTL_RERANKER)
 
     elapsed = (time.time() - start_time) * 1000
-    logger.debug(f"Reranking scores: {[f'{s:.3f}' for _, s in ranked[:top_k]]}")
+    logger.debug(
+        "Reranking scores: "
+        + str(
+            [
+                {
+                    "semantic": f"{semantic:.3f}",
+                    "final": f"{final:.3f}",
+                    "content_type": (doc.metadata or {}).get("content_type", "body"),
+                }
+                for doc, semantic, final in ranked[:top_k]
+            ]
+        )
+    )
     logger.info(f"Reranked {len(documents)} -> {top_k} docs in {elapsed:.0f}ms (cached)")
 
     return result_docs

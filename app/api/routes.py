@@ -1,5 +1,5 @@
 import os
-import shutil
+import tempfile
 import time
 from uuid import uuid4
 
@@ -30,6 +30,7 @@ from app.db.vector_db import (
     delete_indexed_document,
 )
 from app.services.rag_service import query as rag_query, query_stream
+from app.services.document_storage import upload_document, delete_document_file
 from app.core.cache import cache_stats, cache_clear_all, invalidate_on_ingest
 from ingestion.loader import load_pdf
 from ingestion.chunking import chunk_documents
@@ -79,18 +80,28 @@ async def ingest_pdf(file: UploadFile = File(...)):
         logger.warning(f"Invalid file type: {file.filename}")
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-    file_path = os.path.join(settings.UPLOAD_DIR, file.filename)
+    document_id = str(uuid4())
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded PDF is empty")
 
-    # Save file
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    temp_file_path = ""
 
     # Parse PDF
     try:
-        document_id = str(uuid4())
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            temp_file.write(file_bytes)
+            temp_file_path = temp_file.name
+
+        parsed_docs = load_pdf(temp_file_path)
+        storage_path = await upload_document(
+            document_id=document_id,
+            filename=file.filename,
+            file_bytes=file_bytes,
+        )
         docs = _annotate_loaded_docs(
-            load_pdf(file_path),
-            file_path=file_path,
+            parsed_docs,
+            file_path=storage_path,
             filename=file.filename,
             document_id=document_id,
         )
@@ -98,6 +109,9 @@ async def ingest_pdf(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Failed to parse PDF: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)}")
+    finally:
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
 
     # Chunk documents
     try:
@@ -146,9 +160,14 @@ async def get_documents():
 async def delete_document(document_id: str):
     """Delete an indexed document from the vector store by document id."""
     try:
+        documents = list_indexed_documents()
+        document = next((item for item in documents if item["document_id"] == document_id), None)
         chunks_deleted = delete_indexed_document(document_id)
         if chunks_deleted == 0:
             raise HTTPException(status_code=404, detail="Document not found")
+
+        if document and document.get("source_path"):
+            await delete_document_file(document["source_path"])
 
         invalidate_on_ingest()
         logger.info(f"Deleted indexed document {document_id} ({chunks_deleted} chunks)")
