@@ -1,6 +1,6 @@
 # DocBot - RAG Application
 
-A Retrieval-Augmented Generation (RAG) application for querying PDF documents using OpenAI, Qdrant Cloud, and LangGraph. Includes a modern Next.js frontend with streaming responses.
+A Retrieval-Augmented Generation (RAG) application for querying PDF documents using OpenAI, Qdrant Cloud, and LangGraph. It includes a modern Next.js frontend, streaming responses, cloud-backed PDF storage, and a Docker-based local demo workflow.
 
 ## Features
 
@@ -29,6 +29,7 @@ A Retrieval-Augmented Generation (RAG) application for querying PDF documents us
   - Thread persistence across sessions
   - Compact source chips with expandable source details
   - Thread reloads with persisted source metadata for newer answers
+  - Docker-ready local demo workflow
 
 ## Architecture
 
@@ -142,9 +143,12 @@ DocBot/
 │   ├── embedder.py             # Embedding helper
 │   └── indexer.py              # Full indexing pipeline
 │
-├── tests/                      # Unit tests
+├── tests/                      # Retrieval and answer evaluation tests
+├── Dockerfile                  # Backend container image
+├── docker-compose.yml          # Local full-stack Docker workflow
 ├── render.yaml                 # Render deployment config
-├── requirements.txt
+├── requirements.txt            # Full local/dev dependencies
+├── requirements-prod.txt       # Slimmer production/container dependencies
 ├── .env
 └── README.md
 ```
@@ -173,7 +177,6 @@ Create a `.env` file in the root directory:
 ```env
 # OpenAI
 OPENAI_API_KEY=your_openai_api_key
-HF_TOKEN=your_huggingface_token
 
 # Logging
 LOG_LEVEL=INFO
@@ -190,6 +193,8 @@ QDRANT_COLLECTION_NAME=RAG-app
 
 # Supabase PostgreSQL (for LangGraph checkpointer)
 SUPABASE_DB_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres
+CHECKPOINTER_POOL_MIN_SIZE=1
+CHECKPOINTER_POOL_MAX_SIZE=3
 
 # Supabase Storage (for uploaded PDFs)
 SUPABASE_URL=https://your-project-ref.supabase.co
@@ -229,6 +234,46 @@ npm run dev
 - Backend API: http://localhost:8001
 - API Docs: http://localhost:8001/docs
 
+### 4. Run with Docker
+
+This project includes Docker support for a portfolio-friendly local demo setup. Docker runs the frontend and backend locally; Qdrant, Supabase, Redis, and OpenAI still come from your configured `.env`.
+
+Build and start both services:
+
+```bash
+docker compose up --build
+```
+
+Run in the background:
+
+```bash
+docker compose up --build -d
+```
+
+Stop everything:
+
+```bash
+docker compose down
+```
+
+Services:
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8001
+- API Docs: http://localhost:8001/docs
+
+Docker files included:
+
+- [Dockerfile](/Users/amit/Desktop/DocuBot/DocBot/Dockerfile) for the FastAPI backend
+- [frontend/Dockerfile](/Users/amit/Desktop/DocuBot/DocBot/frontend/Dockerfile) for the Next.js frontend
+- [docker-compose.yml](/Users/amit/Desktop/DocuBot/DocBot/docker-compose.yml) to run both together
+- [requirements-prod.txt](/Users/amit/Desktop/DocuBot/DocBot/requirements-prod.txt) for a slimmer backend production image
+
+Recommended demo path:
+
+- use `docker compose up --build` for the most reliable local showcase
+- use the deployed/cloud services only for Qdrant, Supabase, Redis, and OpenAI
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -259,7 +304,7 @@ event: status
 data: {"message": "Searching the document index"}
 
 event: metadata
-data: {"sources": 5, "source_items": [{"document_id": "...", "filename": "RAG_LLM.pdf", "source_path": "./documents/RAG_LLM.pdf", "page_number": 9, "chunk_id": "...", "excerpt": "..."}]}
+data: {"sources": 5, "source_items": [{"document_id": "...", "filename": "RAG_LLM.pdf", "source_path": "documents/<document-id>/RAG_LLM.pdf", "page_number": 9, "chunk_id": "...", "excerpt": "..."}]}
 
 event: token
 data: {"token": "The"}
@@ -294,7 +339,7 @@ Response:
   {
     "document_id": "c1712875-8ae7-4dd9-a0bd-97af9be5aaae",
     "filename": "RAG_LLM.pdf",
-    "source_path": "./documents/RAG_LLM.pdf",
+    "source_path": "documents/c1712875-8ae7-4dd9-a0bd-97af9be5aaae/RAG_LLM.pdf",
     "chunk_count": 352,
     "page_count": 20
   }
@@ -342,8 +387,8 @@ Response:
 3. Connect your GitHub repo
 4. Settings:
    - **Runtime:** Python
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - **Build Command:** `pip install -r requirements-prod.txt`
+   - **Start Command:** `bash -lc "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"`
 5. Add environment variables from your `.env`
 6. Deploy
 
@@ -447,6 +492,7 @@ The current evaluation set is defined directly in `TESTSET` inside `tests/test_r
 | **Observability** | LangSmith |
 | **Backend Hosting** | Render |
 | **Frontend Hosting** | Vercel |
+| **Containerization** | Docker + Docker Compose |
 
 ## TODO
 

@@ -1,0 +1,34 @@
+# Core
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+httpx
+python-multipart
+
+# LangChain
+langchain
+langchain-openai
+langchain-community
+langchain-core
+langchain-text-splitters
+langchain_pymupdf4llm
+
+# LangGraph
+langgraph
+langgraph-checkpoint-postgres
+psycopg[binary]
+psycopg_pool
+
+# Vector Store
+langchain-qdrant
+qdrant-client
+
+# Caching
+redis
+
+# Reranking
+sentence_transformers
+
+# Observability
+langsmith

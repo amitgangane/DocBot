@@ -39,6 +39,7 @@ def _run_background_loop(loop: asyncio.AbstractEventLoop):
 async def _create_async_checkpointer():
     pool = AsyncConnectionPool(
         conninfo=settings.SUPABASE_DB_URL,
+        min_size=settings.CHECKPOINTER_POOL_MIN_SIZE,
         max_size=settings.CHECKPOINTER_POOL_MAX_SIZE,
         kwargs={"autocommit": True, "prepare_threshold": None},
     )

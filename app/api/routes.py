@@ -23,17 +23,8 @@ from app.models import (
     CacheStatsResponse,
     CacheClearResponse,
 )
-from app.db.vector_db import (
-    get_vectorstore,
-    get_chunk_count,
-    list_indexed_documents,
-    delete_indexed_document,
-)
-from app.services.rag_service import query as rag_query, query_stream
 from app.services.document_storage import upload_document, delete_document_file
 from app.core.cache import cache_stats, cache_clear_all, invalidate_on_ingest
-from ingestion.loader import load_pdf
-from ingestion.chunking import chunk_documents
 
 router = APIRouter()
 
@@ -89,6 +80,10 @@ async def ingest_pdf(file: UploadFile = File(...)):
 
     # Parse PDF
     try:
+        from ingestion.loader import load_pdf
+        from ingestion.chunking import chunk_documents
+        from app.db.vector_db import get_vectorstore
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             temp_file.write(file_bytes)
             temp_file_path = temp_file.name
@@ -150,6 +145,8 @@ async def ingest_pdf(file: UploadFile = File(...)):
 async def get_documents():
     """List indexed documents available in the vector store."""
     try:
+        from app.db.vector_db import list_indexed_documents
+
         return list_indexed_documents()
     except Exception as e:
         logger.error(f"Failed to list indexed documents: {str(e)}")
@@ -160,6 +157,8 @@ async def get_documents():
 async def delete_document(document_id: str):
     """Delete an indexed document from the vector store by document id."""
     try:
+        from app.db.vector_db import list_indexed_documents, delete_indexed_document
+
         documents = list_indexed_documents()
         document = next((item for item in documents if item["document_id"] == document_id), None)
         chunks_deleted = delete_indexed_document(document_id)
@@ -190,6 +189,8 @@ async def embed_chunks(request: EmbedRequest):
     Receive chunks and store them in the vector store.
     """
     try:
+        from app.db.vector_db import get_vectorstore, get_chunk_count
+
         vectorstore = get_vectorstore()
         texts = [chunk.page_content for chunk in request.chunks]
         metadatas = [chunk.metadata for chunk in request.chunks]
@@ -210,6 +211,8 @@ async def embed_chunks(request: EmbedRequest):
 async def get_count():
     """Get total chunk count in vector store."""
     try:
+        from app.db.vector_db import get_chunk_count
+
         count = get_chunk_count()
         return CountResponse(total_chunks=count, status="ok")
     except Exception as e:
@@ -226,6 +229,8 @@ async def query_documents(request: QueryRequest):
     logger.info(f"Query received: \"{request.question[:50]}...\" thread_id={request.thread_id}")
 
     try:
+        from app.services.rag_service import query as rag_query
+
         result = await rag_query(request.question, thread_id=request.thread_id)
         elapsed = time.time() - start_time
         logger.info(f"Query complete: {result['sources']} sources in {elapsed:.2f}s")
@@ -251,6 +256,7 @@ async def query_documents_stream(request: QueryRequest):
     - done: {status: "complete"}
     """
     logger.info(f"Stream query received: \"{request.question[:50]}...\" thread_id={request.thread_id}")
+    from app.services.rag_service import query_stream
 
     return StreamingResponse(
         query_stream(request.question, thread_id=request.thread_id),
