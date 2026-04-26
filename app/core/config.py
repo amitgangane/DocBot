@@ -39,6 +39,7 @@ class Settings:
 
     # Supabase PostgreSQL (for LangGraph checkpointer)
     SUPABASE_DB_URL: str = os.getenv("SUPABASE_DB_URL", "")
+    CHECKPOINTER_POOL_MAX_SIZE: int = int(os.getenv("CHECKPOINTER_POOL_MAX_SIZE", "3"))
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "documents")

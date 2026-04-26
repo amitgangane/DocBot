@@ -1,5 +1,7 @@
 import os
 from collections import defaultdict
+from typing import Optional
+
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from langchain_qdrant import QdrantVectorStore
@@ -10,11 +12,7 @@ from app.core.logger import setup_logger
 
 logger = setup_logger("vector_db")
 
-# 1. Initialize Embeddings
-_embeddings = OpenAIEmbeddings(
-    model=settings.EMBEDDING_MODEL,
-    api_key=settings.OPENAI_API_KEY,
-)
+_embeddings: Optional[OpenAIEmbeddings] = None
 
 _vectorstore = None
 
@@ -45,13 +43,19 @@ def get_vectorstore() -> QdrantVectorStore:
         _vectorstore = QdrantVectorStore(
             client=client,
             collection_name=settings.QDRANT_COLLECTION_NAME,
-            embedding=_embeddings,
+            embedding=get_embeddings(),
         )
         logger.info(f"Connected to Qdrant collection: {settings.QDRANT_COLLECTION_NAME}")
 
     return _vectorstore
 
 def get_embeddings() -> OpenAIEmbeddings:
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = OpenAIEmbeddings(
+            model=settings.EMBEDDING_MODEL,
+            api_key=settings.OPENAI_API_KEY,
+        )
     return _embeddings
 
 

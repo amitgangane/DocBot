@@ -1,15 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.services.graph import init_checkpointer, close_checkpointer
+from app.services.graph import close_checkpointer
 
 from app.api.routes import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize checkpointer once at startup
-    await init_checkpointer()
-
     yield
 
     # Clean shutdown
